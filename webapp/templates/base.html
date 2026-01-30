@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Casey Eval Dashboard{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style>
+        .chat-bubble-casey {
+            background-color: #e5e7eb;
+            border-radius: 1rem;
+            border-bottom-left-radius: 0.25rem;
+        }
+        .chat-bubble-client {
+            background-color: #3b82f6;
+            color: white;
+            border-radius: 1rem;
+            border-bottom-right-radius: 0.25rem;
+        }
+        .verdict-pass { color: #16a34a; }
+        .verdict-fail { color: #dc2626; }
+        .verdict-partial { color: #ca8a04; }
+        .verdict-na { color: #6b7280; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 py-3">
+            <div class="flex items-center justify-between">
+                <a href="/" class="text-xl font-semibold text-gray-800">
+                    Casey Eval Dashboard
+                </a>
+                <div class="text-sm text-gray-500">
+                    ODL Agentforce Evaluation Suite
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 py-6">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="border-t bg-white mt-8">
+        <div class="max-w-7xl mx-auto px-4 py-4 text-center text-sm text-gray-500">
+            Open Door Legal - Casey Intake Agent Evaluation
+        </div>
+    </footer>
+</body>
+</html>

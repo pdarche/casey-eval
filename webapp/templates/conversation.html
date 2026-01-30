@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}{{ conversation.persona.name }} - Casey Eval{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="javascript:history.back()" class="text-blue-600 hover:text-blue-800 text-sm">&larr; Back</a>
+    <h1 class="text-2xl font-bold text-gray-800 mt-2">{{ conversation.persona.name }}</h1>
+    <p class="text-gray-600 mt-1">
+        {{ conversation.persona.language }} &middot;
+        {{ conversation.persona.legal_issue }} &middot;
+        {{ conversation.turn_count }} turns &middot;
+        {{ "%.1f"|format(conversation.duration_seconds) }}s
+    </p>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Transcript -->
+    <div class="lg:col-span-2">
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-6 py-4 border-b">
+                <h2 class="text-lg font-semibold text-gray-800">Conversation</h2>
+            </div>
+            <div class="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                {% for msg in conversation.transcript %}
+                <div class="{% if msg.role == 'casey' %}pr-12{% else %}pl-12{% endif %}">
+                    <div class="text-xs text-gray-500 mb-1 {% if msg.role == 'client' %}text-right{% endif %}">
+                        {{ 'Casey' if msg.role == 'casey' else 'Client' }}
+                    </div>
+                    <div class="{% if msg.role == 'casey' %}chat-bubble-casey{% else %}chat-bubble-client ml-auto{% endif %} p-3 max-w-[85%] {% if msg.role == 'client' %}ml-auto{% endif %}"
+                         style="white-space: pre-wrap;">{{ msg.content }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="space-y-6">
+        <!-- Persona Info -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">Persona</h3>
+            <dl class="space-y-2 text-sm">
+                <div class="flex justify-between">
+                    <dt class="text-gray-500">Name</dt>
+                    <dd class="text-gray-900">{{ conversation.persona.name }}</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-gray-500">Language</dt>
+                    <dd class="text-gray-900">{{ conversation.persona.language }}</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-gray-500">Legal Issue</dt>
+                    <dd class="text-gray-900">{{ conversation.persona.legal_issue }}</dd>
+                </div>
+                {% if conversation.persona.discloses_dv %}
+                <div class="flex justify-between">
+                    <dt class="text-gray-500">DV Disclosure</dt>
+                    <dd class="text-red-600 font-medium">Yes</dd>
+                </div>
+                {% endif %}
+                {% if conversation.persona.discloses_crisis %}
+                <div class="flex justify-between">
+                    <dt class="text-gray-500">Crisis</dt>
+                    <dd class="text-red-600 font-medium">Yes</dd>
+                </div>
+                {% endif %}
+            </dl>
+            <div class="mt-4 pt-4 border-t">
+                <div class="text-sm text-gray-500 mb-1">Issue Details</div>
+                <div class="text-sm text-gray-700">{{ conversation.persona.issue_details }}</div>
+            </div>
+        </div>
+
+        <!-- Session Info -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">Session</h3>
+            <dl class="space-y-2 text-sm">
+                <div class="flex justify-between">
+                    <dt class="text-gray-500">Status</dt>
+                    <dd>
+                        {% if conversation.completion_reason == 'intake_complete' %}
+                            <span class="text-green-600 font-medium">Complete</span>
+                        {% elif conversation.completion_reason == 'error' %}
+                            <span class="text-red-600 font-medium">Error</span>
+                        {% else %}
+                            <span class="text-yellow-600 font-medium">{{ conversation.completion_reason }}</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-gray-500">Turns</dt>
+                    <dd class="text-gray-900">{{ conversation.turn_count }}</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-gray-500">Duration</dt>
+                    <dd class="text-gray-900">{{ "%.1f"|format(conversation.duration_seconds) }}s</dd>
+                </div>
+                {% if conversation.version %}
+                <div class="flex justify-between">
+                    <dt class="text-gray-500">Version</dt>
+                    <dd class="text-gray-900">{{ conversation.version }}</dd>
+                </div>
+                {% endif %}
+            </dl>
+        </div>
+
+        <!-- Judge Results -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">Evaluation</h3>
+            <div id="judge-results">
+                <button
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors"
+                    hx-post="/api/run-judges"
+                    hx-headers='{"Content-Type": "application/json"}'
+                    hx-vals='{"filepath": "{{ conversation._filepath }}"}'
+                    hx-target="#judge-results"
+                    hx-swap="innerHTML"
+                    hx-indicator="#loading-indicator"
+                >
+                    Run Judges
+                </button>
+                <div id="loading-indicator" class="htmx-indicator text-center py-4">
+                    <span class="text-gray-500">Running evaluation...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'judge-results') {
+        try {
+            const data = JSON.parse(event.detail.xhr.responseText);
+            if (data.error) {
+                event.detail.target.innerHTML = `<div class="text-red-600 text-sm">${data.error}</div>`;
+                return;
+            }
+
+            let html = '<div class="space-y-4">';
+
+            // Safety results
+            html += '<div><div class="text-sm font-medium text-gray-700 mb-2">Safety</div>';
+            for (const r of data.safety) {
+                const icon = r.verdict === 'pass' ? '✓' : r.verdict === 'fail' ? '✗' : '-';
+                const color = r.verdict === 'pass' ? 'text-green-600' : r.verdict === 'fail' ? 'text-red-600' : 'text-gray-400';
+                html += `<div class="flex items-start gap-2 text-sm py-1">
+                    <span class="${color}">${icon}</span>
+                    <div>
+                        <div class="font-medium text-gray-800">${r.judge_id.replace('safety_', '')}</div>
+                        <div class="text-gray-500 text-xs">${r.reasoning || r.verdict}</div>
+                    </div>
+                </div>`;
+            }
+            html += '</div>';
+
+            // Quality results
+            html += '<div class="pt-4 border-t"><div class="text-sm font-medium text-gray-700 mb-2">Quality</div>';
+            for (const r of data.quality) {
+                const score = r.score ? `${r.score.toFixed(1)}/5` : r.verdict;
+                html += `<div class="flex items-start gap-2 text-sm py-1">
+                    <span class="text-gray-600 w-10">${score}</span>
+                    <div>
+                        <div class="font-medium text-gray-800">${r.judge_id.replace('quality_', '')}</div>
+                        <div class="text-gray-500 text-xs">${r.reasoning || ''}</div>
+                    </div>
+                </div>`;
+            }
+            html += '</div>';
+
+            html += '</div>';
+            event.detail.target.innerHTML = html;
+        } catch (e) {
+            console.error('Error parsing response', e);
+        }
+    }
+});
+</script>
+{% endblock %}

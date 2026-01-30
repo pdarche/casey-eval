@@ -3,9 +3,9 @@
 Run multiple simulated conversations in parallel.
 
 Usage:
-    uv run python run_batch.py --count 10
-    uv run python run_batch.py --count 10 --parallel 5
-    uv run python run_batch.py --all-personas
+    uv run python scripts/run_batch.py --count 10
+    uv run python scripts/run_batch.py --count 10 --parallel 5
+    uv run python scripts/run_batch.py --version "v1.0-baseline" --count 10
 """
 
 import os
@@ -30,7 +30,7 @@ def safe_print(*args, **kwargs):
         print(*args, **kwargs)
 
 
-def run_single_conversation(persona, max_turns: int, output_dir: str, conversation_id: int):
+def run_single_conversation(persona, max_turns: int, output_dir: str, conversation_id: int, version: str = None):
     """Run a single conversation (designed to be called in parallel)."""
     from agentforce.agents import Agentforce
     from openai import OpenAI
@@ -137,6 +137,7 @@ def run_single_conversation(persona, max_turns: int, output_dir: str, conversati
 
     # Build result
     result = {
+        "version": version,
         "persona": {
             "name": persona.name,
             "language": persona.primary_language.value,
@@ -181,8 +182,12 @@ def main():
     parser.add_argument("--output", "-o", default="transcripts", help="Output directory")
     parser.add_argument("--all-personas", action="store_true", help="Run all edge case personas")
     parser.add_argument("--random", action="store_true", help="Generate random personas")
+    parser.add_argument("--version", "-v", default=None, help="Version tag for this eval run (e.g., 'v1.0-baseline')")
 
     args = parser.parse_args()
+
+    # Generate version from timestamp if not provided
+    version = args.version or datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # Check for required env vars
     required = ["CASEY_API_URL", "SALESFORCE_CLIENT_ID", "SALESFORCE_CLIENT_SECRET",
@@ -209,6 +214,7 @@ def main():
 
     print("=" * 60)
     print(f"BATCH EVALUATION")
+    print(f"Version: {version}")
     print(f"Conversations: {len(personas)}")
     print(f"Parallel workers: {args.parallel}")
     print(f"Max turns: {args.max_turns}")
@@ -229,6 +235,7 @@ def main():
                 args.max_turns,
                 args.output,
                 i + 1,
+                version,
             )
             futures.append(future)
 
@@ -258,6 +265,7 @@ def main():
     # Save batch summary
     summary_path = Path(args.output) / f"batch_summary_{start_time.strftime('%Y%m%d_%H%M%S')}.json"
     summary = {
+        "version": version,
         "start_time": start_time.isoformat(),
         "end_time": end_time.isoformat(),
         "total_duration_seconds": total_duration,
