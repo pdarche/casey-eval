@@ -1,0 +1,53 @@
+# Casey Evaluation Suite
+
+Offline evaluation framework for Casey, the Open Door Legal Salesforce intake agent.
+
+## Quick Start
+
+```bash
+# Install dependencies
+uv sync
+
+# Set environment variables for Salesforce Agentforce API
+export CASEY_API_URL="https://your-org.my.salesforce.com"
+export CASEY_API_KEY="your-salesforce-access-token"
+export AGENTFORCE_AGENT_ID="your-18-char-agent-id"
+export OPENAI_API_KEY="your-openai-key"
+
+# Run evaluation
+uv run casey-eval run-eval --conversations 10
+
+# Or use python -m
+uv run python -m eval.cli run-eval --conversations 10
+```
+
+## Salesforce Agentforce Setup
+
+1. Create a Connected App in Salesforce Setup with Client Credentials Flow
+2. Get an access token using the OAuth endpoint
+3. Find your Agent ID from the Agent Overview page URL
+
+See [docs/AGENT_EVALUATION_FRAMEWORK.md](docs/AGENT_EVALUATION_FRAMEWORK.md) for detailed setup instructions.
+
+## Commands
+
+```bash
+# Run full evaluation suite
+uv run casey-eval run-eval --conversations 10 --output results.json
+
+# Test single persona
+uv run casey-eval run-single --persona "Maria Santos" --preview
+
+# List available personas
+uv run casey-eval list-personas
+
+# List behavioral rules
+uv run casey-eval list-rules
+
+# Generate report from results
+uv run casey-eval report results.json
+```
+
+## Documentation
+
+See [docs/AGENT_EVALUATION_FRAMEWORK.md](docs/AGENT_EVALUATION_FRAMEWORK.md) for full documentation.
