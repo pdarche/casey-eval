@@ -88,6 +88,12 @@
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
                 </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Safety
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Quality
+                </th>
             </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
@@ -127,6 +133,26 @@
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                             {{ conv.completion_reason }}
                         </span>
+                    {% endif %}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                    {% if conv.has_eval %}
+                        {% if conv.safety_passed %}
+                            <span class="text-green-600 font-medium">Pass</span>
+                        {% else %}
+                            <span class="text-red-600 font-medium">Fail</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="text-gray-400">-</span>
+                    {% endif %}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                    {% if conv.has_eval and conv.quality_score is not none %}
+                        <span class="{% if conv.quality_score >= 4 %}text-green-600{% elif conv.quality_score >= 3 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                            {{ "%.1f"|format(conv.quality_score) }}/5
+                        </span>
+                    {% else %}
+                        <span class="text-gray-400">-</span>
                     {% endif %}
                 </td>
             </tr>

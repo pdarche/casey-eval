@@ -53,6 +53,25 @@ def load_eval_results(filepath: Path) -> Optional[dict]:
     return None
 
 
+def compute_eval_metrics(eval_data: dict) -> tuple[bool, float]:
+    """
+    Compute safety pass and quality score from eval results.
+    Returns (safety_passed, avg_quality_score).
+    """
+    # Safety: pass if no failures
+    safety_results = eval_data.get("safety", [])
+    safety_passed = all(
+        r.get("verdict") != "fail" for r in safety_results
+    )
+
+    # Quality: average of non-null scores
+    quality_results = eval_data.get("quality", [])
+    scores = [r.get("score") for r in quality_results if r.get("score") is not None]
+    avg_quality = sum(scores) / len(scores) if scores else None
+
+    return safety_passed, avg_quality
+
+
 def get_transcripts_dir() -> Path:
     """Get the transcripts directory."""
     # Try relative to webapp, then relative to project root
@@ -107,6 +126,15 @@ def list_versions(transcripts_dir: Path = None) -> list[VersionSummary]:
             }
 
         persona = data.get("persona", {})
+
+        # Load eval results if available
+        eval_data = load_eval_results(transcript_file)
+        has_eval = eval_data is not None
+        safety_passed = None
+        quality_score = None
+        if eval_data:
+            safety_passed, quality_score = compute_eval_metrics(eval_data)
+
         conv = ConversationSummary(
             session_id=data.get("session_id", transcript_file.stem),
             persona_name=persona.get("name", "Unknown"),
@@ -118,6 +146,9 @@ def list_versions(transcripts_dir: Path = None) -> list[VersionSummary]:
             version=version,
             start_time=data.get("start_time", ""),
             filepath=str(transcript_file),
+            has_eval=has_eval,
+            safety_passed=safety_passed,
+            quality_score=quality_score,
         )
         versions[version]["conversations"].append(conv)
 
@@ -131,13 +162,28 @@ def list_versions(transcripts_dir: Path = None) -> list[VersionSummary]:
         completed = sum(1 for c in convs if c.completion_reason == "intake_complete")
         completion_rate = completed / len(convs) if convs else 0
 
+        # Aggregate eval metrics
+        convs_with_eval = [c for c in convs if c.has_eval]
+        safety_pass_rate = None
+        avg_quality_score = None
+
+        if convs_with_eval:
+            # Safety pass rate: % of evaluated conversations that passed all safety checks
+            safety_passed_count = sum(1 for c in convs_with_eval if c.safety_passed)
+            safety_pass_rate = safety_passed_count / len(convs_with_eval)
+
+            # Avg quality score across all evaluated conversations
+            quality_scores = [c.quality_score for c in convs_with_eval if c.quality_score is not None]
+            if quality_scores:
+                avg_quality_score = sum(quality_scores) / len(quality_scores)
+
         result.append(VersionSummary(
             version=version,
             start_time=info.get("start_time") or (convs[0].start_time if convs else ""),
             conversation_count=len(convs),
             completion_rate=completion_rate,
-            safety_pass_rate=None,  # Populated after running judges
-            avg_quality_score=None,
+            safety_pass_rate=safety_pass_rate,
+            avg_quality_score=avg_quality_score,
             completion_reasons=info.get("completion_reasons", {}),
             conversations=convs,
         ))
@@ -169,6 +215,10 @@ def get_conversation(session_id: str, transcripts_dir: Path = None) -> Optional[
             data = json.loads(transcript_file.read_text())
             if data.get("session_id") == session_id:
                 data["_filepath"] = str(transcript_file)
+                # Load eval results if they exist
+                eval_data = load_eval_results(transcript_file)
+                if eval_data:
+                    data["_eval"] = eval_data
                 return data
         except json.JSONDecodeError:
             continue
@@ -182,5 +232,9 @@ def get_conversation_by_file(filepath: str) -> Optional[dict]:
     if path.exists():
         data = json.loads(path.read_text())
         data["_filepath"] = str(path)
+        # Load eval results if they exist
+        eval_data = load_eval_results(path)
+        if eval_data:
+            data["_eval"] = eval_data
         return data
     return None

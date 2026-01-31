@@ -107,74 +107,242 @@
 
         <!-- Judge Results -->
         <div class="bg-white rounded-lg shadow p-6">
-            <h3 class="text-lg font-semibold text-gray-800 mb-4">Evaluation</h3>
-            <div id="judge-results">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-800">Evaluation</h3>
                 <button
-                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors"
-                    hx-post="/api/run-judges"
-                    hx-headers='{"Content-Type": "application/json"}'
-                    hx-vals='{"filepath": "{{ conversation._filepath }}"}'
-                    hx-target="#judge-results"
-                    hx-swap="innerHTML"
-                    hx-indicator="#loading-indicator"
+                    id="run-judges-btn"
+                    class="text-sm {% if conversation._eval %}bg-gray-500 hover:bg-gray-600{% else %}bg-blue-600 hover:bg-blue-700{% endif %} text-white font-medium py-1.5 px-3 rounded transition-colors"
+                    onclick="runJudges()"
                 >
-                    Run Judges
+                    {% if conversation._eval %}Re-run Judges{% else %}Run Judges{% endif %}
                 </button>
-                <div id="loading-indicator" class="htmx-indicator text-center py-4">
-                    <span class="text-gray-500">Running evaluation...</span>
+            </div>
+            <div id="judge-results">
+                {% if conversation._eval %}
+                <!-- Cached evaluation results -->
+                <div class="mb-6">
+                    <h4 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Safety</h4>
+                    {% for r in conversation._eval.safety %}
+                    {% set is_passed = r.verdict == 'pass' %}
+                    {% set is_failed = r.verdict == 'fail' %}
+                    {% set bg_color = 'bg-green-50' if is_passed else ('bg-red-50' if is_failed else 'bg-gray-50') %}
+                    {% set border_color = 'border-green-200' if is_passed else ('border-red-200' if is_failed else 'border-gray-200') %}
+                    {% set icon = '✓' if is_passed else ('✗' if is_failed else '-') %}
+                    {% set icon_color = 'text-green-600' if is_passed else ('text-red-600' if is_failed else 'text-gray-400') %}
+                    {% set judge_name = r.judge_id|replace('safety_', '')|replace('_', ' ') %}
+                    <div class="{{ bg_color }} border {{ border_color }} rounded-lg p-3 mb-2">
+                        <div class="flex items-start gap-2">
+                            <span class="{{ icon_color }} text-lg font-bold">{{ icon }}</span>
+                            <div class="flex-1 min-w-0">
+                                <div class="font-medium text-gray-800 capitalize">{{ judge_name }}</div>
+                                <div class="text-xs text-gray-600 mt-1">{{ r.reasoning or '' }}</div>
+                                {% if r.evidence and r.evidence|length > 0 %}
+                                <div class="mt-2 text-xs">
+                                    <div class="text-gray-500 font-medium mb-1">Evidence:</div>
+                                    <div class="text-gray-600 italic bg-white/50 p-2 rounded">
+                                        {% if r.evidence is string %}{{ r.evidence }}{% else %}{{ r.evidence[:2]|join('<br>'|safe) }}{% endif %}
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
+
+                <div>
+                    <h4 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Quality</h4>
+                    {% for r in conversation._eval.quality %}
+                    {% set score = r.score %}
+                    {% set bg_color = 'bg-green-50' if score and score >= 4 else ('bg-yellow-50' if score and score >= 3 else ('bg-red-50' if score else 'bg-gray-50')) %}
+                    {% set border_color = 'border-green-200' if score and score >= 4 else ('border-yellow-200' if score and score >= 3 else ('border-red-200' if score else 'border-gray-200')) %}
+                    {% set score_color = 'text-green-600' if score and score >= 4 else ('text-yellow-600' if score and score >= 3 else ('text-red-600' if score else 'text-gray-400')) %}
+                    {% set judge_name = r.judge_id|replace('quality_', '')|replace('_', ' ') %}
+                    <div class="{{ bg_color }} border {{ border_color }} rounded-lg p-3 mb-2">
+                        <div class="flex items-start gap-3">
+                            <div class="text-center">
+                                <div class="{{ score_color }} text-xl font-bold">{% if score %}{{ "%.1f"|format(score) }}{% else %}N/A{% endif %}</div>
+                                {% if score %}<div class="text-xs text-gray-400">/5</div>{% endif %}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="font-medium text-gray-800 capitalize">{{ judge_name }}</div>
+                                <div class="text-xs text-gray-600 mt-1">{{ r.reasoning or '' }}</div>
+                                {% if r.metadata and r.metadata.positive_examples and r.metadata.positive_examples|length > 0 %}
+                                <div class="mt-2 text-xs">
+                                    <div class="text-green-600 font-medium mb-1">+ Good examples:</div>
+                                    <div class="text-gray-600 italic bg-white/50 p-2 rounded">{{ r.metadata.positive_examples[:2]|join('<br>'|safe) }}</div>
+                                </div>
+                                {% endif %}
+                                {% if r.metadata and r.metadata.negative_examples and r.metadata.negative_examples|length > 0 %}
+                                <div class="mt-2 text-xs">
+                                    <div class="text-red-600 font-medium mb-1">- Issues:</div>
+                                    <div class="text-gray-600 italic bg-white/50 p-2 rounded">{{ r.metadata.negative_examples[:2]|join('<br>'|safe) }}</div>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-gray-400 text-sm text-center py-4">
+                    Click "Run Judges" to evaluate this conversation
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
 </div>
 
 <script>
-document.body.addEventListener('htmx:afterSwap', function(event) {
-    if (event.detail.target.id === 'judge-results') {
-        try {
-            const data = JSON.parse(event.detail.xhr.responseText);
-            if (data.error) {
-                event.detail.target.innerHTML = `<div class="text-red-600 text-sm">${data.error}</div>`;
-                return;
-            }
+async function runJudges() {
+    const btn = document.getElementById('run-judges-btn');
+    const resultsDiv = document.getElementById('judge-results');
 
-            let html = '<div class="space-y-4">';
+    btn.disabled = true;
+    btn.textContent = 'Running...';
+    btn.className = 'text-sm bg-gray-400 text-white font-medium py-1.5 px-3 rounded';
 
-            // Safety results
-            html += '<div><div class="text-sm font-medium text-gray-700 mb-2">Safety</div>';
-            for (const r of data.safety) {
-                const icon = r.verdict === 'pass' ? '✓' : r.verdict === 'fail' ? '✗' : '-';
-                const color = r.verdict === 'pass' ? 'text-green-600' : r.verdict === 'fail' ? 'text-red-600' : 'text-gray-400';
-                html += `<div class="flex items-start gap-2 text-sm py-1">
-                    <span class="${color}">${icon}</span>
-                    <div>
-                        <div class="font-medium text-gray-800">${r.judge_id.replace('safety_', '')}</div>
-                        <div class="text-gray-500 text-xs">${r.reasoning || r.verdict}</div>
-                    </div>
-                </div>`;
-            }
-            html += '</div>';
+    resultsDiv.innerHTML = '<div class="text-gray-500 text-sm text-center py-4">Evaluating conversation...</div>';
 
-            // Quality results
-            html += '<div class="pt-4 border-t"><div class="text-sm font-medium text-gray-700 mb-2">Quality</div>';
-            for (const r of data.quality) {
-                const score = r.score ? `${r.score.toFixed(1)}/5` : r.verdict;
-                html += `<div class="flex items-start gap-2 text-sm py-1">
-                    <span class="text-gray-600 w-10">${score}</span>
-                    <div>
-                        <div class="font-medium text-gray-800">${r.judge_id.replace('quality_', '')}</div>
-                        <div class="text-gray-500 text-xs">${r.reasoning || ''}</div>
-                    </div>
-                </div>`;
-            }
-            html += '</div>';
+    try {
+        const response = await fetch('/api/run-judges', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filepath: '{{ conversation._filepath }}' })
+        });
 
-            html += '</div>';
-            event.detail.target.innerHTML = html;
-        } catch (e) {
-            console.error('Error parsing response', e);
+        const data = await response.json();
+
+        if (data.error) {
+            resultsDiv.innerHTML = `<div class="text-red-600 text-sm">${data.error}</div>`;
+            btn.textContent = 'Retry';
+            btn.className = 'text-sm bg-blue-600 hover:bg-blue-700 text-white font-medium py-1.5 px-3 rounded transition-colors';
+            btn.disabled = false;
+            return;
         }
+
+        // Render results
+        let html = '';
+
+        // Safety Section
+        html += '<div class="mb-6">';
+        html += '<h4 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Safety</h4>';
+        for (const r of data.safety) {
+            const isPassed = r.verdict === 'pass';
+            const isFailed = r.verdict === 'fail';
+            const isNA = r.verdict === 'not_applicable';
+
+            let bgColor = 'bg-gray-50';
+            let borderColor = 'border-gray-200';
+            let icon = '-';
+            let iconColor = 'text-gray-400';
+
+            if (isPassed) {
+                bgColor = 'bg-green-50';
+                borderColor = 'border-green-200';
+                icon = '✓';
+                iconColor = 'text-green-600';
+            } else if (isFailed) {
+                bgColor = 'bg-red-50';
+                borderColor = 'border-red-200';
+                icon = '✗';
+                iconColor = 'text-red-600';
+            }
+
+            const judgeName = r.judge_id.replace('safety_', '').replace(/_/g, ' ');
+
+            html += `
+                <div class="${bgColor} border ${borderColor} rounded-lg p-3 mb-2">
+                    <div class="flex items-start gap-2">
+                        <span class="${iconColor} text-lg font-bold">${icon}</span>
+                        <div class="flex-1 min-w-0">
+                            <div class="font-medium text-gray-800 capitalize">${judgeName}</div>
+                            <div class="text-xs text-gray-600 mt-1">${r.reasoning || ''}</div>
+                            ${r.evidence && r.evidence.length ? `
+                                <div class="mt-2 text-xs">
+                                    <div class="text-gray-500 font-medium mb-1">Evidence:</div>
+                                    <div class="text-gray-600 italic bg-white/50 p-2 rounded">${typeof r.evidence === 'string' ? r.evidence : r.evidence.slice(0, 2).join('<br>')}</div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        html += '</div>';
+
+        // Quality Section
+        html += '<div>';
+        html += '<h4 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Quality</h4>';
+        for (const r of data.quality) {
+            const score = r.score;
+            const isNA = r.verdict === 'not_applicable';
+
+            let bgColor = 'bg-gray-50';
+            let borderColor = 'border-gray-200';
+            let scoreDisplay = 'N/A';
+            let scoreColor = 'text-gray-400';
+
+            if (score !== null) {
+                if (score >= 4) {
+                    bgColor = 'bg-green-50';
+                    borderColor = 'border-green-200';
+                    scoreColor = 'text-green-600';
+                } else if (score >= 3) {
+                    bgColor = 'bg-yellow-50';
+                    borderColor = 'border-yellow-200';
+                    scoreColor = 'text-yellow-600';
+                } else {
+                    bgColor = 'bg-red-50';
+                    borderColor = 'border-red-200';
+                    scoreColor = 'text-red-600';
+                }
+                scoreDisplay = score.toFixed(1);
+            }
+
+            const judgeName = r.judge_id.replace('quality_', '').replace(/_/g, ' ');
+
+            html += `
+                <div class="${bgColor} border ${borderColor} rounded-lg p-3 mb-2">
+                    <div class="flex items-start gap-3">
+                        <div class="text-center">
+                            <div class="${scoreColor} text-xl font-bold">${scoreDisplay}</div>
+                            ${score !== null ? '<div class="text-xs text-gray-400">/5</div>' : ''}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="font-medium text-gray-800 capitalize">${judgeName}</div>
+                            <div class="text-xs text-gray-600 mt-1">${r.reasoning || ''}</div>
+                            ${r.metadata && r.metadata.positive_examples && r.metadata.positive_examples.length ? `
+                                <div class="mt-2 text-xs">
+                                    <div class="text-green-600 font-medium mb-1">+ Good examples:</div>
+                                    <div class="text-gray-600 italic bg-white/50 p-2 rounded">${r.metadata.positive_examples.slice(0, 2).join('<br>')}</div>
+                                </div>
+                            ` : ''}
+                            ${r.metadata && r.metadata.negative_examples && r.metadata.negative_examples.length ? `
+                                <div class="mt-2 text-xs">
+                                    <div class="text-red-600 font-medium mb-1">- Issues:</div>
+                                    <div class="text-gray-600 italic bg-white/50 p-2 rounded">${r.metadata.negative_examples.slice(0, 2).join('<br>')}</div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        html += '</div>';
+
+        resultsDiv.innerHTML = html;
+        btn.textContent = 'Re-run';
+        btn.className = 'text-sm bg-gray-500 hover:bg-gray-600 text-white font-medium py-1.5 px-3 rounded transition-colors';
+        btn.disabled = false;
+
+    } catch (e) {
+        resultsDiv.innerHTML = `<div class="text-red-600 text-sm">Error: ${e.message}</div>`;
+        btn.textContent = 'Retry';
+        btn.className = 'text-sm bg-blue-600 hover:bg-blue-700 text-white font-medium py-1.5 px-3 rounded transition-colors';
+        btn.disabled = false;
     }
-});
+}
 </script>
 {% endblock %}
