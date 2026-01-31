@@ -148,18 +148,27 @@ def main():
         # Print summary
         print_summary(results)
 
-        # Collect for output
-        all_results.append({
+        # Build result dict
+        result_dict = {
             "file": filepath,
             "persona": persona,
             "safety": [r.to_dict() for r in results["safety"]],
             "quality": [r.to_dict() for r in results["quality"]],
-        })
+        }
+        all_results.append(result_dict)
 
-    # Save results if requested
+        # Auto-save eval alongside transcript
+        transcript_path = Path(filepath)
+        eval_dir = transcript_path.parent / "evals"
+        eval_dir.mkdir(exist_ok=True)
+        eval_path = eval_dir / f"{transcript_path.stem}_eval.json"
+        eval_path.write_text(json.dumps(result_dict, indent=2))
+        print(f"\nEval saved to: {eval_path}")
+
+    # Save combined results if requested
     if args.output:
         Path(args.output).write_text(json.dumps(all_results, indent=2))
-        print(f"\nResults saved to: {args.output}")
+        print(f"\nCombined results saved to: {args.output}")
 
 
 if __name__ == "__main__":
