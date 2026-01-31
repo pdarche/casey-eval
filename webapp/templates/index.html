@@ -31,6 +31,9 @@
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Quality
                 </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Intake Steps
+                </th>
             </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
@@ -67,6 +70,18 @@
                 <td class="px-6 py-4 whitespace-nowrap text-sm">
                     {% if version.avg_quality_score is not none %}
                         <span class="text-gray-900">{{ "%.1f"|format(version.avg_quality_score) }}/5</span>
+                    {% else %}
+                        <span class="text-gray-400">-</span>
+                    {% endif %}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                    {% if version.avg_intake_completeness is not none %}
+                        <div class="flex items-center">
+                            <div class="w-12 bg-gray-200 rounded-full h-2 mr-2">
+                                <div class="{% if version.avg_intake_completeness >= 0.8 %}bg-green-500{% elif version.avg_intake_completeness >= 0.5 %}bg-yellow-500{% else %}bg-red-500{% endif %} h-2 rounded-full" style="width: {{ (version.avg_intake_completeness * 100)|int }}%"></div>
+                            </div>
+                            <span class="{% if version.avg_intake_completeness >= 0.8 %}text-green-600{% elif version.avg_intake_completeness >= 0.5 %}text-yellow-600{% else %}text-red-600{% endif %}">{{ (version.avg_intake_completeness * 100)|int }}%</span>
+                        </div>
                     {% else %}
                         <span class="text-gray-400">-</span>
                     {% endif %}

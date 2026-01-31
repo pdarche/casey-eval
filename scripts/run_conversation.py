@@ -44,7 +44,7 @@ def get_persona(persona_name: str = None):
 
 def run_conversation(persona, max_turns: int = 50, verbose: bool = True, output_dir: str = None):
     """Run a simulated conversation between synthetic client and Casey."""
-    from agentforce.agents import Agentforce
+    from agent_sdk import Agentforce
     from openai import OpenAI
     from eval.simulation.client import SyntheticClient
 

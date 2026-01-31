@@ -44,6 +44,7 @@ Thumbs.db
 # Project specific
 transcripts/
 notes/
+data/
 
 # Test artifacts
 *.log

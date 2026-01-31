@@ -25,6 +25,9 @@ class ConversationSummary:
     has_eval: bool = False
     safety_passed: Optional[bool] = None
     quality_score: Optional[float] = None
+    intake_completeness: Optional[float] = None  # 0-1 completion rate
+    intake_steps_completed: Optional[int] = None
+    intake_steps_total: Optional[int] = None
 
 
 @dataclass
@@ -36,6 +39,7 @@ class VersionSummary:
     completion_rate: float
     safety_pass_rate: Optional[float]
     avg_quality_score: Optional[float]
+    avg_intake_completeness: Optional[float]  # Average intake completion rate
     completion_reasons: dict
     conversations: list[ConversationSummary]
 
@@ -53,10 +57,10 @@ def load_eval_results(filepath: Path) -> Optional[dict]:
     return None
 
 
-def compute_eval_metrics(eval_data: dict) -> tuple[bool, float]:
+def compute_eval_metrics(eval_data: dict) -> tuple[bool, float, float, int, int]:
     """
-    Compute safety pass and quality score from eval results.
-    Returns (safety_passed, avg_quality_score).
+    Compute safety pass, quality score, and intake completeness from eval results.
+    Returns (safety_passed, avg_quality_score, intake_completeness, steps_completed, steps_total).
     """
     # Safety: pass if no failures
     safety_results = eval_data.get("safety", [])
@@ -69,7 +73,14 @@ def compute_eval_metrics(eval_data: dict) -> tuple[bool, float]:
     scores = [r.get("score") for r in quality_results if r.get("score") is not None]
     avg_quality = sum(scores) / len(scores) if scores else None
 
-    return safety_passed, avg_quality
+    # Completeness: get completion rate from completeness judge
+    completeness_data = eval_data.get("completeness", {})
+    completeness_metadata = completeness_data.get("metadata", {}) if completeness_data else {}
+    intake_completeness = completeness_metadata.get("completion_rate")
+    steps_completed = completeness_metadata.get("steps_completed")
+    steps_total = completeness_metadata.get("steps_total")
+
+    return safety_passed, avg_quality, intake_completeness, steps_completed, steps_total
 
 
 def get_transcripts_dir() -> Path:
@@ -132,8 +143,11 @@ def list_versions(transcripts_dir: Path = None) -> list[VersionSummary]:
         has_eval = eval_data is not None
         safety_passed = None
         quality_score = None
+        intake_completeness = None
+        intake_steps_completed = None
+        intake_steps_total = None
         if eval_data:
-            safety_passed, quality_score = compute_eval_metrics(eval_data)
+            safety_passed, quality_score, intake_completeness, intake_steps_completed, intake_steps_total = compute_eval_metrics(eval_data)
 
         conv = ConversationSummary(
             session_id=data.get("session_id", transcript_file.stem),
@@ -149,6 +163,9 @@ def list_versions(transcripts_dir: Path = None) -> list[VersionSummary]:
             has_eval=has_eval,
             safety_passed=safety_passed,
             quality_score=quality_score,
+            intake_completeness=intake_completeness,
+            intake_steps_completed=intake_steps_completed,
+            intake_steps_total=intake_steps_total,
         )
         versions[version]["conversations"].append(conv)
 
@@ -167,6 +184,8 @@ def list_versions(transcripts_dir: Path = None) -> list[VersionSummary]:
         safety_pass_rate = None
         avg_quality_score = None
 
+        avg_intake_completeness = None
+
         if convs_with_eval:
             # Safety pass rate: % of evaluated conversations that passed all safety checks
             safety_passed_count = sum(1 for c in convs_with_eval if c.safety_passed)
@@ -177,6 +196,11 @@ def list_versions(transcripts_dir: Path = None) -> list[VersionSummary]:
             if quality_scores:
                 avg_quality_score = sum(quality_scores) / len(quality_scores)
 
+            # Avg intake completeness across all evaluated conversations
+            completeness_scores = [c.intake_completeness for c in convs_with_eval if c.intake_completeness is not None]
+            if completeness_scores:
+                avg_intake_completeness = sum(completeness_scores) / len(completeness_scores)
+
         result.append(VersionSummary(
             version=version,
             start_time=info.get("start_time") or (convs[0].start_time if convs else ""),
@@ -184,6 +208,7 @@ def list_versions(transcripts_dir: Path = None) -> list[VersionSummary]:
             completion_rate=completion_rate,
             safety_pass_rate=safety_pass_rate,
             avg_quality_score=avg_quality_score,
+            avg_intake_completeness=avg_intake_completeness,
             completion_reasons=info.get("completion_reasons", {}),
             conversations=convs,
         ))

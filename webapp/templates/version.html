@@ -10,7 +10,7 @@
 </div>
 
 <!-- Stats Cards -->
-<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
     <div class="bg-white rounded-lg shadow p-4">
         <div class="text-sm text-gray-500 uppercase tracking-wide">Conversations</div>
         <div class="text-3xl font-bold text-gray-800 mt-1">{{ version.conversation_count }}</div>
@@ -34,6 +34,16 @@
         <div class="text-3xl font-bold text-gray-800 mt-1">
             {% if version.avg_quality_score is not none %}
                 {{ "%.1f"|format(version.avg_quality_score) }}/5
+            {% else %}
+                -
+            {% endif %}
+        </div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500 uppercase tracking-wide">Intake Steps</div>
+        <div class="text-3xl font-bold {% if version.avg_intake_completeness is not none and version.avg_intake_completeness >= 0.8 %}text-green-600{% elif version.avg_intake_completeness is not none and version.avg_intake_completeness >= 0.5 %}text-yellow-600{% elif version.avg_intake_completeness is not none %}text-red-600{% else %}text-gray-400{% endif %} mt-1">
+            {% if version.avg_intake_completeness is not none %}
+                {{ (version.avg_intake_completeness * 100)|int }}%
             {% else %}
                 -
             {% endif %}
@@ -94,6 +104,9 @@
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Quality
                 </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Intake Steps
+                </th>
             </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
@@ -151,6 +164,18 @@
                         <span class="{% if conv.quality_score >= 4 %}text-green-600{% elif conv.quality_score >= 3 %}text-yellow-600{% else %}text-red-600{% endif %}">
                             {{ "%.1f"|format(conv.quality_score) }}/5
                         </span>
+                    {% else %}
+                        <span class="text-gray-400">-</span>
+                    {% endif %}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                    {% if conv.has_eval and conv.intake_completeness is not none %}
+                        <div class="flex items-center gap-1">
+                            <span class="{% if conv.intake_completeness >= 0.8 %}text-green-600{% elif conv.intake_completeness >= 0.5 %}text-yellow-600{% else %}text-red-600{% endif %} font-medium">
+                                {{ conv.intake_steps_completed }}/{{ conv.intake_steps_total }}
+                            </span>
+                            <span class="text-gray-400 text-xs">({{ (conv.intake_completeness * 100)|int }}%)</span>
+                        </div>
                     {% else %}
                         <span class="text-gray-400">-</span>
                     {% endif %}

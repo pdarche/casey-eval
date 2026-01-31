@@ -81,6 +81,7 @@ def run_judges_api():
         from eval.judges.base import ConversationContext, ConversationTurn
         from eval.judges.safety import SafetyEvaluator
         from eval.judges.quality import QualityEvaluator
+        from eval.judges.completeness import CompletenessEvaluator
 
         openai_key = os.environ.get("OPENAI_API_KEY")
         if not openai_key:
@@ -107,13 +108,16 @@ def run_judges_api():
         # Run judges
         safety_eval = SafetyEvaluator(llm_client=llm_client, model="gpt-4o")
         quality_eval = QualityEvaluator(llm_client=llm_client, model="gpt-4o")
+        completeness_eval = CompletenessEvaluator(llm_client=llm_client, model="gpt-4o")
 
         safety_results = safety_eval.evaluate_all(context)
         quality_results = quality_eval.evaluate_all(context)
+        completeness_result = completeness_eval.evaluate(context)
 
         return jsonify({
             "safety": [r.to_dict() for r in safety_results],
             "quality": [r.to_dict() for r in quality_results],
+            "completeness": completeness_result.to_dict(),
         })
 
     except Exception as e:

@@ -3,7 +3,7 @@
 Test Agentforce API using the salesforce-agentforce SDK
 """
 
-from agentforce.agents import Agentforce
+from agent_sdk import Agentforce
 
 # Configuration - using original working credentials
 # Note: SDK expects domain only, not full URL

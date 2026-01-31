@@ -5,7 +5,7 @@ description = "Eval suite for Casey, the ODL Salesforce intake agent"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "agentforce-sdk>=0.1.0",
+    "salesforce-agentforce>=0.1.0",
     "python-dotenv>=1.0.0",
     "openai>=1.0.0",
     "httpx>=0.24.0",
