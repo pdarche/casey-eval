@@ -1,12 +1,43 @@
 """
 Data loading utilities for the eval dashboard.
+
+Supports both database (PostgreSQL) and filesystem (JSON files) backends.
+The database backend is preferred when available.
 """
 
+import os
 import json
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, List
+
+# Check if database is available
+_use_database = None
+
+
+def _should_use_database() -> bool:
+    """Check if we should use the database backend."""
+    global _use_database
+    if _use_database is not None:
+        return _use_database
+
+    # Check environment variable override
+    if os.environ.get("USE_FILESYSTEM", "").lower() in ("true", "1", "yes"):
+        _use_database = False
+        return False
+
+    # Try to import and check database
+    try:
+        from webapp.db import is_database_available, init_pool
+        from eval.database import init_pool as db_init_pool
+        db_init_pool()
+        _use_database = is_database_available()
+    except Exception as e:
+        print(f"Database not available, using filesystem: {e}")
+        _use_database = False
+
+    return _use_database
 
 
 @dataclass
@@ -41,7 +72,7 @@ class VersionSummary:
     avg_quality_score: Optional[float]
     avg_intake_completeness: Optional[float]  # Average intake completion rate
     completion_reasons: dict
-    conversations: list[ConversationSummary]
+    conversations: List[ConversationSummary]
 
 
 def load_transcript(filepath: Path) -> dict:
@@ -96,8 +127,57 @@ def get_transcripts_dir() -> Path:
     return candidates[0]
 
 
-def list_versions(transcripts_dir: Path = None) -> list[VersionSummary]:
+def list_versions(transcripts_dir: Path = None) -> List[VersionSummary]:
     """List all versions with their summaries."""
+    # Try database first
+    if _should_use_database():
+        try:
+            from webapp.db import list_versions_from_db
+            db_versions = list_versions_from_db()
+            # Convert db dataclasses to local dataclasses for compatibility
+            return [
+                VersionSummary(
+                    version=v.version,
+                    start_time=v.start_time,
+                    conversation_count=v.conversation_count,
+                    completion_rate=v.completion_rate,
+                    safety_pass_rate=v.safety_pass_rate,
+                    avg_quality_score=v.avg_quality_score,
+                    avg_intake_completeness=v.avg_intake_completeness,
+                    completion_reasons=v.completion_reasons,
+                    conversations=[
+                        ConversationSummary(
+                            session_id=c.session_id,
+                            persona_name=c.persona_name,
+                            language=c.language,
+                            legal_issue=c.legal_issue,
+                            turn_count=c.turn_count,
+                            duration_seconds=c.duration_seconds,
+                            completion_reason=c.completion_reason,
+                            version=c.version,
+                            start_time=c.start_time,
+                            filepath=c.filepath,
+                            has_eval=c.has_eval,
+                            safety_passed=c.safety_passed,
+                            quality_score=c.quality_score,
+                            intake_completeness=c.intake_completeness,
+                            intake_steps_completed=c.intake_steps_completed,
+                            intake_steps_total=c.intake_steps_total,
+                        )
+                        for c in v.conversations
+                    ]
+                )
+                for v in db_versions
+            ]
+        except Exception as e:
+            print(f"Database error, falling back to filesystem: {e}")
+
+    # Fall back to filesystem
+    return _list_versions_from_filesystem(transcripts_dir)
+
+
+def _list_versions_from_filesystem(transcripts_dir: Path = None) -> List[VersionSummary]:
+    """List all versions from filesystem."""
     if transcripts_dir is None:
         transcripts_dir = get_transcripts_dir()
 
@@ -229,6 +309,22 @@ def get_version(version_id: str, transcripts_dir: Path = None) -> Optional[Versi
 
 def get_conversation(session_id: str, transcripts_dir: Path = None) -> Optional[dict]:
     """Get a specific conversation by session ID."""
+    # Try database first
+    if _should_use_database():
+        try:
+            from webapp.db import get_conversation_from_db
+            result = get_conversation_from_db(session_id)
+            if result:
+                return result
+        except Exception as e:
+            print(f"Database error, falling back to filesystem: {e}")
+
+    # Fall back to filesystem
+    return _get_conversation_from_filesystem(session_id, transcripts_dir)
+
+
+def _get_conversation_from_filesystem(session_id: str, transcripts_dir: Path = None) -> Optional[dict]:
+    """Get a specific conversation from filesystem."""
     if transcripts_dir is None:
         transcripts_dir = get_transcripts_dir()
 
@@ -253,6 +349,19 @@ def get_conversation(session_id: str, transcripts_dir: Path = None) -> Optional[
 
 def get_conversation_by_file(filepath: str) -> Optional[dict]:
     """Get a conversation by its filepath."""
+    # Check if this is a database reference
+    if filepath.startswith("db://conversations/"):
+        if _should_use_database():
+            try:
+                from webapp.db import get_conversation_by_id_from_db
+                conversation_id = int(filepath.split("/")[-1])
+                return get_conversation_by_id_from_db(conversation_id)
+            except Exception as e:
+                print(f"Database error: {e}")
+                return None
+        return None
+
+    # Filesystem path
     path = Path(filepath)
     if path.exists():
         data = json.loads(path.read_text())
