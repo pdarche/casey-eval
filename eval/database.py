@@ -192,6 +192,7 @@ class SimulationRun:
     config: Dict[str, Any] = None
     status: str = "pending"
     summary: Optional[Dict[str, Any]] = None
+    ai_summary: Optional[str] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     created_at: Optional[datetime] = None

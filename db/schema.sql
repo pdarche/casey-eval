@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS simulation_runs (
     config JSONB NOT NULL DEFAULT '{}', -- EvaluationConfig as JSON
     status VARCHAR(50) DEFAULT 'pending', -- pending, running, completed, failed
     summary JSONB,                      -- Aggregated results
+    ai_summary TEXT,                    -- AI-generated summary of run performance
     started_at TIMESTAMPTZ,
     completed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()

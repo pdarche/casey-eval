@@ -6,6 +6,7 @@ Usage:
     uv run python webapp/app.py
 """
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -758,13 +759,257 @@ def index():
     return redirect("/runs")
 
 
+@app.route("/api/version/<version_id>/status")
+def get_version_status(version_id: str):
+    """Get the current status of a version/run for polling."""
+    if not get_db_available():
+        return jsonify({"error": "Database not available"}), 500
+
+    from eval.database import get_cursor
+
+    with get_cursor() as cursor:
+        # Get run info
+        cursor.execute(
+            "SELECT id, status, config FROM simulation_runs WHERE version = %s",
+            (version_id,)
+        )
+        run = cursor.fetchone()
+        if not run:
+            return jsonify({"error": "Run not found"}), 404
+
+        run_id = run["id"]
+        target_count = run["config"].get("count", 10) if run["config"] else 10
+
+        # Get conversation count
+        cursor.execute(
+            "SELECT COUNT(*) as count FROM conversations WHERE simulation_run_id = %s",
+            (run_id,)
+        )
+        conv_count = cursor.fetchone()["count"]
+
+        # Get judged count
+        cursor.execute(
+            """SELECT COUNT(DISTINCT j.conversation_id) as count
+               FROM judgments j
+               JOIN conversations c ON j.conversation_id = c.id
+               WHERE c.simulation_run_id = %s""",
+            (run_id,)
+        )
+        judged_count = cursor.fetchone()["count"]
+
+        # Get metrics if completed
+        safety_pass_rate = None
+        avg_quality_score = None
+        avg_completeness = None
+
+        if run["status"] == "completed" and conv_count > 0:
+            cursor.execute(
+                """SELECT
+                    COUNT(CASE WHEN j.verdict = 'pass' THEN 1 END)::float /
+                    NULLIF(COUNT(*), 0) as pass_rate
+                FROM judgments j
+                JOIN conversations c ON j.conversation_id = c.id
+                WHERE c.simulation_run_id = %s AND j.judge_type = 'safety'""",
+                (run_id,)
+            )
+            result = cursor.fetchone()
+            safety_pass_rate = result["pass_rate"] if result else None
+
+            cursor.execute(
+                """SELECT AVG(j.score) as avg_score
+                FROM judgments j
+                JOIN conversations c ON j.conversation_id = c.id
+                WHERE c.simulation_run_id = %s AND j.judge_type = 'quality'""",
+                (run_id,)
+            )
+            result = cursor.fetchone()
+            avg_quality_score = result["avg_score"] if result else None
+
+            cursor.execute(
+                """SELECT AVG(j.score) as avg_score
+                FROM judgments j
+                JOIN conversations c ON j.conversation_id = c.id
+                WHERE c.simulation_run_id = %s AND j.judge_type = 'completeness'""",
+                (run_id,)
+            )
+            result = cursor.fetchone()
+            avg_completeness = result["avg_score"] if result else None
+
+        return jsonify({
+            "status": run["status"],
+            "conversation_count": conv_count,
+            "target_count": target_count,
+            "judged_count": judged_count,
+            "safety_pass_rate": safety_pass_rate,
+            "avg_quality_score": avg_quality_score,
+            "avg_completeness": avg_completeness,
+        })
+
+
+@app.route("/api/version/<version_id>/summary")
+def generate_version_summary(version_id: str):
+    """Generate an AI summary of the run's performance with recommendations."""
+    if not get_db_available():
+        return jsonify({"error": "Database not available"}), 500
+
+    from eval.database import get_cursor
+
+    # Get the simulation run
+    with get_cursor() as cursor:
+        cursor.execute(
+            "SELECT id, version, config FROM simulation_runs WHERE version = %s",
+            (version_id,)
+        )
+        run = cursor.fetchone()
+        if not run:
+            return jsonify({"error": "Run not found"}), 404
+
+        run_id = run["id"]
+
+        # Get all judgments with their details
+        cursor.execute(
+            """SELECT
+                j.judge_type,
+                j.judge_id,
+                j.verdict,
+                j.score,
+                j.reasoning,
+                c.persona,
+                c.completion_reason
+            FROM judgments j
+            JOIN conversations c ON j.conversation_id = c.id
+            WHERE c.simulation_run_id = %s
+            ORDER BY j.judge_type, j.judge_id""",
+            (run_id,)
+        )
+        judgments = cursor.fetchall()
+
+        if not judgments:
+            return jsonify({"error": "No judgments found for this run"}), 404
+
+        # Get conversation count
+        cursor.execute(
+            "SELECT COUNT(*) as count FROM conversations WHERE simulation_run_id = %s",
+            (run_id,)
+        )
+        conv_count = cursor.fetchone()["count"]
+
+    # Build summary data for the LLM
+    summary_data = {
+        "version": version_id,
+        "conversation_count": conv_count,
+        "judgments_by_type": {},
+    }
+
+    for j in judgments:
+        jtype = j["judge_type"]
+        jid = j["judge_id"]
+        key = f"{jtype}:{jid}"
+
+        if key not in summary_data["judgments_by_type"]:
+            summary_data["judgments_by_type"][key] = {
+                "type": jtype,
+                "id": jid,
+                "verdicts": [],
+                "scores": [],
+                "sample_reasoning": [],
+            }
+
+        summary_data["judgments_by_type"][key]["verdicts"].append(j["verdict"])
+        if j["score"] is not None:
+            summary_data["judgments_by_type"][key]["scores"].append(j["score"])
+        if j["reasoning"] and len(summary_data["judgments_by_type"][key]["sample_reasoning"]) < 5:
+            # Include persona context with reasoning for failures and partial
+            if j["verdict"] in ("fail", "partial"):
+                persona = j["persona"] or {}
+                summary_data["judgments_by_type"][key]["sample_reasoning"].append({
+                    "persona_name": persona.get("name", "Unknown"),
+                    "language": persona.get("language", "Unknown"),
+                    "legal_issue": persona.get("legal_issue", "Unknown"),
+                    "completion_reason": j["completion_reason"],
+                    "reasoning": j["reasoning"][:800],  # Truncate long reasoning
+                    "verdict": j["verdict"],
+                })
+
+    # Compute aggregate stats
+    for key, data in summary_data["judgments_by_type"].items():
+        verdicts = data["verdicts"]
+        data["total"] = len(verdicts)
+        data["pass_count"] = verdicts.count("pass")
+        data["fail_count"] = verdicts.count("fail")
+        data["partial_count"] = verdicts.count("partial")
+        data["pass_rate"] = data["pass_count"] / len(verdicts) if verdicts else 0
+        data["avg_score"] = sum(data["scores"]) / len(data["scores"]) if data["scores"] else None
+        # Remove raw lists to reduce payload
+        del data["verdicts"]
+        del data["scores"]
+
+    # Generate AI summary
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    if not openai_key:
+        return jsonify({"error": "OPENAI_API_KEY not configured"}), 500
+
+    from openai import OpenAI
+    client = OpenAI(api_key=openai_key)
+
+    prompt = f"""Analyze this evaluation run for "Casey", a legal intake agent for Open Door Legal.
+
+Run "{version_id}" - {conv_count} conversations:
+
+{json.dumps(summary_data["judgments_by_type"], indent=2)}
+
+Be concise. Use bullet points. Reference specific personas when noting issues.
+
+## Issues
+- Specific problems found, citing persona names (2-3 bullets)
+
+## Recommendations
+- Guidance for prompt improvements to address the issues (2-3 bullets)"""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4.1",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1000,
+            temperature=0.3,
+        )
+        summary = response.choices[0].message.content
+
+        # Save summary to database
+        with get_cursor() as cursor:
+            cursor.execute(
+                "UPDATE simulation_runs SET ai_summary = %s WHERE version = %s",
+                (summary, version_id)
+            )
+
+        return jsonify({"summary": summary})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/version/<version_id>")
 def version_detail(version_id: str):
     """Detail page for a specific version."""
     version = get_version(version_id)
     if not version:
         return "Version not found", 404
-    return render_template("version.html", version=version)
+
+    # Get run status and saved summary from database
+    run_status = "completed"
+    ai_summary = None
+    if get_db_available():
+        from eval.database import get_cursor
+        with get_cursor() as cursor:
+            cursor.execute(
+                "SELECT status, ai_summary FROM simulation_runs WHERE version = %s",
+                (version_id,)
+            )
+            result = cursor.fetchone()
+            if result:
+                run_status = result["status"]
+                ai_summary = result["ai_summary"]
+
+    return render_template("version.html", version=version, run_status=run_status, ai_summary=ai_summary)
 
 
 @app.route("/conversation/<session_id>")
