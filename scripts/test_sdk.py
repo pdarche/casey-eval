@@ -3,14 +3,19 @@
 Test Agentforce API using the salesforce-agentforce SDK
 """
 
+import os
 from agent_sdk import Agentforce
 
-# Configuration - using original working credentials
-# Note: SDK expects domain only, not full URL
-SALESFORCE_ORG = "opendoorlegal--sfaccel.sandbox.my.salesforce.com"
-CLIENT_ID = "REDACTED_CLIENT_ID"
-CLIENT_SECRET = "REDACTED_CLIENT_SECRET"
-AGENT_ID = "0XxO800000037BRKAY"
+# Configuration - load from environment variables
+SALESFORCE_ORG = os.environ.get("CASEY_API_URL", "").replace("https://", "")
+CLIENT_ID = os.environ.get("SALESFORCE_CLIENT_ID", "")
+CLIENT_SECRET = os.environ.get("SALESFORCE_CLIENT_SECRET", "")
+AGENT_ID = os.environ.get("AGENTFORCE_AGENT_ID", "")
+
+if not all([SALESFORCE_ORG, CLIENT_ID, CLIENT_SECRET, AGENT_ID]):
+    print("Error: Missing required environment variables.")
+    print("Please set: CASEY_API_URL, SALESFORCE_CLIENT_ID, SALESFORCE_CLIENT_SECRET, AGENTFORCE_AGENT_ID")
+    exit(1)
 
 print("=" * 60)
 print("Testing Agentforce SDK")
