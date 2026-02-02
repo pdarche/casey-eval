@@ -1,0 +1,597 @@
+{% extends "base.html" %}
+
+{% block title %}Evaluation Runs - Casey Eval{% endblock %}
+
+{% block content %}
+<div class="mb-6 flex justify-between items-center">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-800">Evaluation Runs</h1>
+        <p class="text-gray-600 mt-1">Manage and launch Casey agent evaluation batches</p>
+    </div>
+    <button
+        onclick="document.getElementById('create-modal').classList.remove('hidden')"
+        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+        + New Evaluation Run
+    </button>
+</div>
+
+{% if error %}
+<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+    {{ error }}
+</div>
+{% endif %}
+
+<div class="bg-white rounded-lg shadow overflow-hidden">
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Version
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Progress
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Safety
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Quality
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Completeness
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                </th>
+            </tr>
+        </thead>
+        <tbody id="runs-table-body" class="bg-white divide-y divide-gray-200">
+            {% for run in runs %}
+            <tr class="hover:bg-gray-50" data-run-id="{{ run.id }}">
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <a href="/version/{{ run.version }}" class="text-blue-600 hover:text-blue-800 font-medium">
+                        {{ run.version }}
+                    </a>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap run-status">
+                    {% if run.status == 'completed' %}
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                            Completed
+                        </span>
+                    {% elif run.status == 'running' %}
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 animate-pulse">
+                            Running
+                        </span>
+                    {% elif run.status == 'judging' %}
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800 animate-pulse">
+                            Judging
+                        </span>
+                    {% elif run.status == 'failed' %}
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                            Failed
+                        </span>
+                    {% else %}
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                            {{ run.status }}
+                        </span>
+                    {% endif %}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap run-progress">
+                    {% if run.status == 'running' %}
+                        <div class="flex items-center min-w-0">
+                            <div class="w-20 flex-shrink-0 bg-gray-200 rounded-full h-2 mr-2">
+                                <div class="bg-blue-600 h-2 rounded-full" style="width: {{ (run.conversation_count / run.target_count * 100) if run.target_count else 0 }}%"></div>
+                            </div>
+                            <span class="text-sm text-gray-600 flex-shrink-0">{{ run.conversation_count or 0 }}/{{ run.target_count or '?' }}</span>
+                        </div>
+                    {% elif run.status == 'judging' %}
+                        <div class="flex items-center min-w-0">
+                            <div class="w-20 flex-shrink-0 bg-gray-200 rounded-full h-2 mr-2">
+                                <div class="bg-purple-600 h-2 rounded-full" style="width: 0%"></div>
+                            </div>
+                            <span class="text-sm text-purple-600 flex-shrink-0">0/{{ run.conversation_count }}</span>
+                        </div>
+                    {% else %}
+                        <span class="text-sm text-gray-900">{{ run.conversation_count or '-' }}</span>
+                    {% endif %}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm run-safety">
+                    {% if run.safety_pass_rate is not none %}
+                        <span class="{% if run.safety_pass_rate == 1 %}text-green-600{% else %}text-red-600{% endif %} font-medium">
+                            {{ (run.safety_pass_rate * 100)|int }}%
+                        </span>
+                    {% else %}
+                        <span class="text-gray-400">-</span>
+                    {% endif %}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm run-quality">
+                    {% if run.avg_quality_score is not none %}
+                        <span class="text-gray-900">{{ "%.1f"|format(run.avg_quality_score) }}/5</span>
+                    {% else %}
+                        <span class="text-gray-400">-</span>
+                    {% endif %}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm run-completeness">
+                    {% if run.avg_completeness is not none %}
+                        <span class="text-gray-900">{{ "%.1f"|format(run.avg_completeness) }}/5</span>
+                    {% else %}
+                        <span class="text-gray-400">-</span>
+                    {% endif %}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm run-actions" data-has-judgments="{{ 'true' if run.has_judgments else 'false' }}">
+                    <a href="/version/{{ run.version }}" class="text-blue-600 hover:text-blue-800 mr-3">View</a>
+                    {% if run.status == 'completed' %}
+                    <button
+                        onclick="runJudges({{ run.id }}, '{{ run.version }}')"
+                        class="text-purple-600 hover:text-purple-800">
+                        {% if run.has_judgments %}Re-judge{% else %}Run Judges{% endif %}
+                    </button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if not runs %}
+<div class="bg-white rounded-lg shadow p-8 text-center mt-4" id="empty-state">
+    <div class="text-gray-400 text-lg mb-2">No evaluation runs found</div>
+    <p class="text-gray-500 text-sm mb-4">
+        Start a new evaluation run to test Casey's performance.
+    </p>
+    <button
+        onclick="document.getElementById('create-modal').classList.remove('hidden')"
+        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+        + New Evaluation Run
+    </button>
+</div>
+{% endif %}
+
+<!-- Create Modal -->
+<div id="create-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">New Evaluation Run</h3>
+            <button
+                onclick="document.getElementById('create-modal').classList.add('hidden')"
+                class="text-gray-400 hover:text-gray-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+
+        <form id="create-form">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Version Name *</label>
+                    <input
+                        type="text"
+                        id="run-version"
+                        required
+                        placeholder="e.g., v1.0-baseline or test-2026-02-01"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <p class="mt-1 text-xs text-gray-500">A unique identifier for this evaluation run</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Prompt Version</label>
+                    <select
+                        id="run-prompt-version"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">Use current active prompt</option>
+                        {% for prompt in prompts %}
+                        <option value="{{ prompt.id }}" {% if prompt.is_active %}selected{% endif %}>
+                            {{ prompt.version }}{% if prompt.is_active %} (active){% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Persona Set</label>
+                    <select
+                        id="run-persona-set"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="all">All Edge Cases (11 personas)</option>
+                        <option value="safety">Safety Personas (4 personas)</option>
+                        <option value="behavioral">Behavioral Personas (4 personas)</option>
+                        <option value="language">Language Personas (3 personas)</option>
+                        <option value="random">Random Generated</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Conversation Count</label>
+                        <input
+                            type="number"
+                            id="run-count"
+                            min="1"
+                            max="100"
+                            value="10"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <p class="mt-1 text-xs text-gray-500">Number of conversations to run</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Max Turns</label>
+                        <input
+                            type="number"
+                            id="run-max-turns"
+                            min="10"
+                            max="100"
+                            value="50"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <p class="mt-1 text-xs text-gray-500">Max turns per conversation</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Parallel Workers</label>
+                        <input
+                            type="number"
+                            id="run-parallel"
+                            min="1"
+                            max="20"
+                            value="5"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <p class="mt-1 text-xs text-gray-500">Concurrent conversations</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Synthetic Client Model</label>
+                        <select
+                            id="run-client-model"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="gpt-4.1-mini">GPT-4.1 Mini (Faster)</option>
+                            <option value="gpt-4.1">GPT-4.1</option>
+                            <option value="gpt-4o">GPT-4o</option>
+                            <option value="gpt-4o-mini">GPT-4o Mini</option>
+                        </select>
+                        <p class="mt-1 text-xs text-gray-500">Model for simulating clients</p>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Judge Model</label>
+                    <select
+                        id="run-judge-model"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="gpt-4.1">GPT-4.1 (Recommended)</option>
+                        <option value="gpt-4.1-mini">GPT-4.1 Mini (Faster/Cheaper)</option>
+                    </select>
+                    <p class="mt-1 text-xs text-gray-500">Model for evaluating conversations</p>
+                </div>
+
+                <div class="flex items-center">
+                    <input
+                        type="checkbox"
+                        id="run-auto-judge"
+                        checked
+                        class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                    <label for="run-auto-judge" class="ml-2 block text-sm text-gray-700">
+                        Automatically run judges after completion
+                    </label>
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end space-x-3">
+                <button
+                    type="button"
+                    onclick="document.getElementById('create-modal').classList.add('hidden')"
+                    class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    Cancel
+                </button>
+                <button
+                    type="submit"
+                    id="submit-btn"
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium">
+                    Start Evaluation
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Running Status Modal -->
+<div id="running-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
+        <div class="text-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">Evaluation Running</h3>
+            <p class="text-gray-600 mb-4" id="running-status">Starting evaluation run...</p>
+            <p class="text-sm text-gray-500">This may take several minutes depending on the number of conversations.</p>
+            <p class="text-sm text-gray-500 mt-2">You can close this dialog - the run will continue in the background.</p>
+            <button
+                onclick="document.getElementById('running-modal').classList.add('hidden')"
+                class="mt-4 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Track active polling
+let pollingInterval = null;
+
+// Poll for run status updates
+async function pollRunStatus() {
+    try {
+        const response = await fetch('/api/runs/status');
+        if (!response.ok) return;
+
+        const runs = await response.json();
+
+        for (const run of runs) {
+            const row = document.querySelector(`tr[data-run-id="${run.id}"]`);
+            if (!row) {
+                // New run - add it to the table
+                addRunRow(run);
+                continue;
+            }
+
+            // Update status badge
+            const statusCell = row.querySelector('.run-status');
+            if (statusCell) {
+                statusCell.innerHTML = getStatusBadge(run.status);
+            }
+
+            // Update progress
+            const progressCell = row.querySelector('.run-progress');
+            if (progressCell) {
+                progressCell.innerHTML = getProgressHtml(run);
+            }
+
+            // Update completed time
+            const completedCell = row.querySelector('.run-completed');
+            if (completedCell && run.completed_at) {
+                completedCell.textContent = run.completed_at;
+            }
+
+            // Update metrics
+            const safetyCell = row.querySelector('.run-safety');
+            if (safetyCell) {
+                safetyCell.innerHTML = getSafetyHtml(run);
+            }
+
+            const qualityCell = row.querySelector('.run-quality');
+            if (qualityCell) {
+                qualityCell.innerHTML = getQualityHtml(run);
+            }
+
+            const completenessCell = row.querySelector('.run-completeness');
+            if (completenessCell) {
+                completenessCell.innerHTML = getCompletenessHtml(run);
+            }
+
+            // Update actions
+            const actionsCell = row.querySelector('.run-actions');
+            if (actionsCell) {
+                actionsCell.innerHTML = getActionsHtml(run);
+            }
+        }
+
+        // Check if any runs are still running or judging
+        const hasActive = runs.some(r => r.status === 'running' || r.status === 'judging');
+        if (!hasActive && pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+        }
+    } catch (err) {
+        console.error('Error polling status:', err);
+    }
+}
+
+function getStatusBadge(status) {
+    const badges = {
+        'completed': '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Completed</span>',
+        'running': '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 animate-pulse">Running</span>',
+        'judging': '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800 animate-pulse">Judging</span>',
+        'failed': '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Failed</span>',
+        'pending': '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Pending</span>'
+    };
+    return badges[status] || badges['pending'];
+}
+
+function getProgressHtml(run) {
+    if (run.status === 'running') {
+        const pct = run.target_count ? Math.round((run.conversation_count / run.target_count) * 100) : 0;
+        return `
+            <div class="flex items-center min-w-0">
+                <div class="w-20 flex-shrink-0 bg-gray-200 rounded-full h-2 mr-2">
+                    <div class="bg-blue-600 h-2 rounded-full transition-all duration-500" style="width: ${pct}%"></div>
+                </div>
+                <span class="text-sm text-gray-600 flex-shrink-0">${run.conversation_count || 0}/${run.target_count || '?'}</span>
+            </div>
+        `;
+    }
+    if (run.status === 'judging') {
+        const pct = run.conversation_count ? Math.round((run.judged_count / run.conversation_count) * 100) : 0;
+        return `
+            <div class="flex items-center min-w-0">
+                <div class="w-20 flex-shrink-0 bg-gray-200 rounded-full h-2 mr-2">
+                    <div class="bg-purple-600 h-2 rounded-full transition-all duration-500" style="width: ${pct}%"></div>
+                </div>
+                <span class="text-sm text-purple-600 flex-shrink-0">${run.judged_count || 0}/${run.conversation_count}</span>
+            </div>
+        `;
+    }
+    return `<span class="text-sm text-gray-900">${run.conversation_count || '-'}</span>`;
+}
+
+function getSafetyHtml(run) {
+    if (run.safety_pass_rate === null || run.safety_pass_rate === undefined) {
+        return '<span class="text-gray-400">-</span>';
+    }
+    const pct = Math.round(run.safety_pass_rate * 100);
+    const colorClass = pct === 100 ? 'text-green-600' : 'text-red-600';
+    return `<span class="${colorClass} font-medium">${pct}%</span>`;
+}
+
+function getQualityHtml(run) {
+    if (run.avg_quality_score === null || run.avg_quality_score === undefined) {
+        return '<span class="text-gray-400">-</span>';
+    }
+    return `<span class="text-gray-900">${run.avg_quality_score.toFixed(1)}/5</span>`;
+}
+
+function getCompletenessHtml(run) {
+    if (run.avg_completeness === null || run.avg_completeness === undefined) {
+        return '<span class="text-gray-400">-</span>';
+    }
+    return `<span class="text-gray-900">${run.avg_completeness.toFixed(1)}/5</span>`;
+}
+
+function getActionsHtml(run) {
+    let html = `<a href="/version/${run.version}" class="text-blue-600 hover:text-blue-800 mr-3">View</a>`;
+    if (run.status === 'completed') {
+        const buttonText = run.has_judgments ? 'Re-judge' : 'Run Judges';
+        html += `<button onclick="runJudges(${run.id}, '${run.version}')" class="text-purple-600 hover:text-purple-800">${buttonText}</button>`;
+    }
+    return html;
+}
+
+function addRunRow(run) {
+    const tbody = document.getElementById('runs-table-body');
+    if (!tbody) return;
+
+    // Hide empty state if visible
+    const emptyState = document.getElementById('empty-state');
+    if (emptyState) emptyState.classList.add('hidden');
+
+    const row = document.createElement('tr');
+    row.className = 'hover:bg-gray-50';
+    row.setAttribute('data-run-id', run.id);
+    row.innerHTML = `
+        <td class="px-6 py-4 whitespace-nowrap">
+            <a href="/version/${run.version}" class="text-blue-600 hover:text-blue-800 font-medium">${run.version}</a>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap run-status">${getStatusBadge(run.status)}</td>
+        <td class="px-6 py-4 whitespace-nowrap run-progress">${getProgressHtml(run)}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm run-safety">${getSafetyHtml(run)}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm run-quality">${getQualityHtml(run)}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm run-completeness">${getCompletenessHtml(run)}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm run-actions" data-has-judgments="${run.has_judgments}">${getActionsHtml(run)}</td>
+    `;
+
+    // Insert at the top
+    tbody.insertBefore(row, tbody.firstChild);
+}
+
+function startPolling() {
+    if (pollingInterval) return;
+    pollingInterval = setInterval(pollRunStatus, 2000);
+}
+
+// Handle form submission
+document.getElementById('create-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const data = {
+        version: document.getElementById('run-version').value,
+        prompt_version_id: document.getElementById('run-prompt-version').value || null,
+        persona_set: document.getElementById('run-persona-set').value,
+        count: parseInt(document.getElementById('run-count').value),
+        max_turns: parseInt(document.getElementById('run-max-turns').value),
+        parallel: parseInt(document.getElementById('run-parallel').value),
+        client_model: document.getElementById('run-client-model').value,
+        judge_model: document.getElementById('run-judge-model').value,
+        auto_judge: document.getElementById('run-auto-judge').checked
+    };
+
+    if (!data.version) {
+        alert('Version name is required');
+        return;
+    }
+
+    // Hide create modal, show running modal
+    document.getElementById('create-modal').classList.add('hidden');
+    document.getElementById('running-modal').classList.remove('hidden');
+    document.getElementById('running-status').textContent = 'Starting evaluation run...';
+
+    try {
+        const response = await fetch('/api/runs', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            document.getElementById('running-status').textContent =
+                'Evaluation started! Tracking progress...';
+
+            // Start polling and close modal
+            startPolling();
+            setTimeout(() => {
+                document.getElementById('running-modal').classList.add('hidden');
+                // Trigger immediate poll
+                pollRunStatus();
+            }, 1500);
+        } else {
+            document.getElementById('running-modal').classList.add('hidden');
+            alert('Error: ' + (result.error || 'Failed to start evaluation'));
+        }
+    } catch (err) {
+        document.getElementById('running-modal').classList.add('hidden');
+        alert('Error: ' + err.message);
+    }
+});
+
+// Run judges on a completed run
+async function runJudges(runId, version) {
+    if (!confirm('Run judges on all conversations in "' + version + '"? This may take several minutes.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/runs/' + runId + '/judge', {
+            method: 'POST'
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            // Start polling to show progress
+            startPolling();
+            // Trigger immediate update
+            pollRunStatus();
+        } else {
+            alert('Error: ' + (result.error || 'Failed to run judges'));
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+// Close modals on escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        document.getElementById('create-modal').classList.add('hidden');
+    }
+});
+
+// Close modal on background click
+document.getElementById('create-modal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        this.classList.add('hidden');
+    }
+});
+
+// Start polling if there are running jobs
+document.addEventListener('DOMContentLoaded', function() {
+    const hasRunning = document.querySelector('.run-status .animate-pulse');
+    if (hasRunning) {
+        startPolling();
+    }
+});
+</script>
+{% endblock %}

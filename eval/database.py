@@ -171,6 +171,15 @@ def set_active_prompt_version(version: str) -> None:
         )
 
 
+def delete_prompt_version(id: int) -> None:
+    """Delete a prompt version by ID."""
+    with get_cursor() as cursor:
+        cursor.execute(
+            "DELETE FROM prompt_versions WHERE id = %s",
+            (id,)
+        )
+
+
 # =============================================================================
 # Simulation Runs
 # =============================================================================
