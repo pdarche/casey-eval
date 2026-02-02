@@ -116,7 +116,7 @@
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm run-completeness">
                     {% if run.avg_completeness is not none %}
-                        <span class="text-gray-900">{{ "%.1f"|format(run.avg_completeness) }}/5</span>
+                        <span class="text-gray-900">{{ ((run.avg_completeness / 5) * 100)|int }}%</span>
                     {% else %}
                         <span class="text-gray-400">-</span>
                     {% endif %}
@@ -444,7 +444,8 @@ function getCompletenessHtml(run) {
     if (run.avg_completeness === null || run.avg_completeness === undefined) {
         return '<span class="text-gray-400">-</span>';
     }
-    return `<span class="text-gray-900">${run.avg_completeness.toFixed(1)}/5</span>`;
+    const pct = Math.round((run.avg_completeness / 5) * 100);
+    return `<span class="text-gray-900">${pct}%</span>`;
 }
 
 function getActionsHtml(run) {

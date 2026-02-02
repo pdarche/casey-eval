@@ -1,5 +1,5 @@
 [project]
-name = "odl-salesforce-agent"
+name = "casey-eval"
 version = "0.1.0"
 description = "Eval suite for Casey, the ODL Salesforce intake agent"
 readme = "README.md"

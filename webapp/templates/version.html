@@ -66,7 +66,7 @@
         <div class="text-sm text-gray-500 uppercase tracking-wide">Completeness</div>
         <div id="stat-completeness" class="text-3xl font-bold text-gray-800 mt-1">
             {% if version.avg_intake_completeness is not none %}
-                {{ "%.1f"|format(version.avg_intake_completeness) }}/5
+                {{ (version.avg_intake_completeness * 100)|int }}%
             {% else %}
                 -
             {% endif %}
@@ -143,7 +143,7 @@ async function pollStatus() {
                 document.getElementById('stat-quality').textContent = data.avg_quality_score.toFixed(1) + '/5';
             }
             if (data.avg_completeness !== null) {
-                document.getElementById('stat-completeness').textContent = data.avg_completeness.toFixed(1) + '/5';
+                document.getElementById('stat-completeness').textContent = Math.round((data.avg_completeness / 5) * 100) + '%';
             }
 
             // Stop polling when completed
@@ -327,7 +327,7 @@ async function generateSummary() {
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm">
                     {% if conv.has_eval and conv.intake_completeness is not none %}
-                        <span class="text-gray-900">{{ "%.1f"|format(conv.intake_completeness) }}/5</span>
+                        <span class="text-gray-900">{{ (conv.intake_completeness * 100)|int }}%</span>
                     {% else %}
                         <span class="text-gray-400">-</span>
                     {% endif %}

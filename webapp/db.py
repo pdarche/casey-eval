@@ -159,12 +159,16 @@ def list_versions_from_db() -> List[VersionSummary]:
                         quality_score = sum(j["score"] for j in quality_results) / len(quality_results)
                         quality_scores.append(quality_score)
 
-                    # Completeness
+                    # Completeness - use score (0-5 scale) converted to 0-1 for consistency
                     completeness_results = [j for j in judgments if j["judge_type"] == "completeness"]
                     if completeness_results:
                         comp = completeness_results[0]
                         metadata = comp["metadata"] or {}
-                        intake_completeness = metadata.get("completion_rate")
+                        # Use score (0-5) converted to 0-1 scale
+                        if comp["score"] is not None:
+                            intake_completeness = comp["score"] / 5.0
+                        else:
+                            intake_completeness = metadata.get("completion_rate")
                         intake_steps_completed = metadata.get("steps_completed")
                         intake_steps_total = metadata.get("steps_total")
                         if intake_completeness is not None:
