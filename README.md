@@ -48,6 +48,29 @@ uv run casey-eval list-rules
 uv run casey-eval report results.json
 ```
 
+## Usage Workflow
+
+### 0. Update the Prompt in Salesforce
+Based on feedback from prior evaluation runs, revise the Casey agent prompt in Salesforce Agentforce.
+
+### 1. Create a New Prompt Version
+Add the updated Salesforce prompt to the evaluation suite by creating a new prompt version:
+```bash
+uv run casey-eval add-prompt --version "v2.1" --file prompt.txt
+```
+
+### 2. Create a New Evaluation Run
+Run an evaluation with your desired parameters:
+```bash
+uv run casey-eval run-eval --conversations 10 --prompt-version "v2.1" --output results.json
+```
+
+### 3. Review and Provide Feedback
+Review the evaluation results and provide feedback to inform the next prompt iteration:
+```bash
+uv run casey-eval report results.json
+```
+
 ## Documentation
 
 See [docs/AGENT_EVALUATION_FRAMEWORK.md](docs/AGENT_EVALUATION_FRAMEWORK.md) for full documentation.
