@@ -114,11 +114,25 @@ def create_prompt():
         return jsonify({"error": f"Version '{version}' already exists"}), 400
 
     try:
+        # Start with user-provided metadata
+        metadata = data.get("metadata", {})
+
+        # Extract intake steps from prompt content
+        try:
+            from eval.prompt_parser import extract_intake_steps
+            steps_data = extract_intake_steps(content)
+            metadata["intake_steps"] = steps_data.get("intake_steps", {})
+            metadata["intake_steps_count"] = steps_data.get("steps_count", 0)
+            metadata["intake_steps_extraction_model"] = steps_data.get("extraction_model", "")
+        except Exception as e:
+            # Log but don't fail - steps extraction is optional
+            print(f"Warning: Failed to extract intake steps: {e}")
+
         prompt_id = create_prompt_version(
             version=version,
             name=data.get("name"),
             content=content,
-            metadata=data.get("metadata", {}),
+            metadata=metadata,
             is_active=False,  # Create as inactive first
         )
 
@@ -565,7 +579,7 @@ def run_single_conversation_to_db(persona, max_turns: int, simulation_run_id: in
 def run_judges_on_simulation(simulation_run_id: int, judge_model: str = "gpt-4.1"):
     """Run judges on all conversations in a simulation."""
     from eval.database import (
-        list_conversations_by_simulation, create_judgment, get_cursor
+        list_conversations_by_simulation, create_judgment, get_cursor, get_simulation_run
     )
     from eval.judges.base import ConversationContext, ConversationTurn
     from eval.judges.safety import SafetyEvaluator
@@ -578,6 +592,10 @@ def run_judges_on_simulation(simulation_run_id: int, judge_model: str = "gpt-4.1
         return
 
     llm_client = OpenAI(api_key=openai_key)
+
+    # Get the simulation run to find the prompt version
+    sim_run = get_simulation_run(simulation_run_id)
+    prompt_version_id = sim_run.prompt_version_id if sim_run else None
 
     conversations = list_conversations_by_simulation(simulation_run_id)
 
@@ -603,7 +621,7 @@ def run_judges_on_simulation(simulation_run_id: int, judge_model: str = "gpt-4.1
         # Run judges
         safety_eval = SafetyEvaluator(llm_client=llm_client, model=judge_model)
         quality_eval = QualityEvaluator(llm_client=llm_client, model=judge_model)
-        completeness_eval = CompletenessEvaluator(llm_client=llm_client, model=judge_model)
+        completeness_eval = CompletenessEvaluator(llm_client=llm_client, model=judge_model, prompt_version_id=prompt_version_id)
 
         # Safety judgments
         for result in safety_eval.evaluate_all(context):
