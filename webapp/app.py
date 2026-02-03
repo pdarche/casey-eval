@@ -345,6 +345,7 @@ def run_evaluation_background(run_id: int, version: str, config: dict):
     )
     from eval.personas.edge_cases import get_personas_by_tag, ALL_EDGE_CASE_PERSONAS
     from eval.personas.generator import PersonaGenerator
+    from webapp.run_tracker import register_run, cleanup_run
 
     # Initialize database pool for this thread
     init_pool()
@@ -365,6 +366,9 @@ def run_evaluation_background(run_id: int, version: str, config: dict):
             personas = []
             for i in range(count):
                 personas.append(base_personas[i % len(base_personas)])
+
+        # Register run for in-memory tracking
+        register_run(run_id, personas)
 
         # Run conversations
         import concurrent.futures
@@ -404,9 +408,14 @@ def run_evaluation_background(run_id: int, version: str, config: dict):
 
         update_simulation_run_status(run_id, "completed", summary)
 
+        # Clean up in-memory tracking
+        cleanup_run(run_id)
+
     except Exception as e:
         print(f"Evaluation error: {e}")
         update_simulation_run_status(run_id, "failed", {"error": str(e)})
+        # Clean up in-memory tracking on failure too
+        cleanup_run(run_id)
 
 
 def run_single_conversation_to_db(persona, max_turns: int, simulation_run_id: int,
@@ -418,6 +427,10 @@ def run_single_conversation_to_db(persona, max_turns: int, simulation_run_id: in
     from eval.simulation.client import SyntheticClient
     from eval.database import create_conversation
     from datetime import datetime
+    from webapp.run_tracker import start_conversation, update_turn_count, complete_conversation
+
+    # Mark conversation as running in tracker
+    start_conversation(simulation_run_id, conversation_id, persona)
 
     # Get credentials
     salesforce_org = os.environ["CASEY_API_URL"].replace("https://", "")
@@ -463,6 +476,9 @@ def run_single_conversation_to_db(persona, max_turns: int, simulation_run_id: in
 
         while turn_count < max_turns:
             turn_count += 1
+
+            # Update turn count in tracker
+            update_turn_count(simulation_run_id, conversation_id, turn_count)
 
             # Generate client response
             client_response = synthetic_client.generate_response(agent_message)
@@ -535,6 +551,9 @@ def run_single_conversation_to_db(persona, max_turns: int, simulation_run_id: in
         end_time=end_time,
         metadata={"error": error} if error else {},
     )
+
+    # Mark conversation as complete in tracker
+    complete_conversation(simulation_run_id, conversation_id)
 
     return {
         "completion_reason": completion_reason,
@@ -626,6 +645,88 @@ def run_judges_on_simulation(simulation_run_id: int, judge_model: str = "gpt-4.1
         )
 
 
+def get_conversations_for_run_status(run_id: int, run_status: str = "running") -> list:
+    """Merge in-memory active + DB completed conversations."""
+    from webapp.run_tracker import get_run_progress
+    from eval.database import get_cursor
+
+    progress = get_run_progress(run_id)
+    if not progress:
+        return []
+
+    # Get completed conversations from DB
+    completed = {}
+    judged_conversation_ids = set()
+
+    with get_cursor() as cursor:
+        cursor.execute(
+            """SELECT id, persona, completion_reason, turn_count
+               FROM conversations
+               WHERE simulation_run_id = %s
+               ORDER BY id""",
+            (run_id,)
+        )
+        for i, row in enumerate(cursor.fetchall()):
+            idx = i + 1
+            completed[idx] = {
+                "conversation_id": row["id"],
+                "completion_reason": row["completion_reason"],
+                "turn_count": row["turn_count"],
+                "persona_name": row["persona"].get("name", f"Persona {idx}") if row["persona"] else f"Persona {idx}",
+            }
+
+        # If judging, check which conversations have judgments
+        if run_status == "judging":
+            cursor.execute(
+                """SELECT DISTINCT conversation_id
+                   FROM judgments j
+                   JOIN conversations c ON j.conversation_id = c.id
+                   WHERE c.simulation_run_id = %s""",
+                (run_id,)
+            )
+            judged_conversation_ids = {row["conversation_id"] for row in cursor.fetchall()}
+
+    # Build unified list
+    conversations = []
+    for i, persona in enumerate(progress["personas"]):
+        idx = i + 1
+        if idx in progress["completed_indices"]:
+            # Get from DB
+            conv = completed.get(idx, {})
+            conv_id = conv.get("conversation_id")
+            is_judged = conv_id in judged_conversation_ids if conv_id else False
+
+            conversations.append({
+                "index": idx,
+                "persona_name": conv.get("persona_name", persona.get("name", f"Persona {idx}")),
+                "status": "completed" if conv.get("completion_reason") != "error" else "error",
+                "completion_reason": conv.get("completion_reason"),
+                "turn_count": conv.get("turn_count", 0),
+                "judged": is_judged,
+            })
+        elif idx in progress["active"]:
+            # Currently running
+            active = progress["active"][idx]
+            conversations.append({
+                "index": idx,
+                "persona_name": active.get("persona_name", f"Persona {idx}"),
+                "status": "running",
+                "turn_count": active.get("turn_count", 0),
+                "judged": False,
+            })
+        else:
+            # Queued
+            conversations.append({
+                "index": idx,
+                "persona_name": persona.get("name", f"Persona {idx}"),
+                "status": "queued",
+                "turn_count": 0,
+                "judged": False,
+            })
+
+    return conversations
+
+
 @app.route("/api/runs/status")
 @login_required
 def get_runs_status():
@@ -634,6 +735,11 @@ def get_runs_status():
         return jsonify([])
 
     from eval.database import list_simulation_runs, get_cursor
+
+    # Check if conversation details are requested
+    include_convs = request.args.get("include_conversations") == "true"
+    expanded_run_ids = request.args.get("run_ids", "").split(",") if include_convs else []
+    expanded_run_ids = [r for r in expanded_run_ids if r]  # Filter empty strings
 
     runs = list_simulation_runs(limit=50)
     result = []
@@ -709,7 +815,7 @@ def get_runs_status():
             )
             total_judgments = cursor.fetchone()["count"]
 
-            result.append({
+            run_data = {
                 "id": run.id,
                 "version": run.version,
                 "status": run.status,
@@ -722,7 +828,13 @@ def get_runs_status():
                 "has_judgments": total_judgments > 0,
                 "started_at": run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else None,
                 "completed_at": run.completed_at.strftime('%Y-%m-%d %H:%M') if run.completed_at else None,
-            })
+            }
+
+            # Add conversation details if requested for this run
+            if str(run.id) in expanded_run_ids and run.status in ("running", "judging"):
+                run_data["conversations"] = get_conversations_for_run_status(run.id, run.status)
+
+            result.append(run_data)
 
     return jsonify(result)
 
