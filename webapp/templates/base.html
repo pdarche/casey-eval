@@ -106,8 +106,13 @@
                         <a href="/prompts" class="text-sm text-gray-600 hover:text-gray-900">Prompts</a>
                     </div>
                 </div>
-                <div class="text-sm text-gray-500">
-                    ODL Agentforce Evaluation Suite
+                <div class="flex items-center space-x-4 text-sm text-gray-500">
+                    <span>ODL Agentforce Evaluation Suite</span>
+                    {% if current_user.is_authenticated %}
+                    <span class="text-gray-400">|</span>
+                    <span>{{ current_user.email }}</span>
+                    <a href="/logout" class="text-blue-600 hover:text-blue-800">Logout</a>
+                    {% endif %}
                 </div>
             </div>
         </div>

@@ -11,6 +11,7 @@ import os
 import sys
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify
+from flask_login import login_required
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -22,8 +23,10 @@ from webapp.utils import (
     get_conversation_by_file,
     get_transcripts_dir,
 )
+from webapp.auth import init_auth
 
 app = Flask(__name__)
+init_auth(app)
 
 
 # =============================================================================
@@ -43,6 +46,7 @@ def get_db_available():
 
 
 @app.route("/prompts")
+@login_required
 def prompts_list():
     """List all prompt versions."""
     if not get_db_available():
@@ -54,6 +58,7 @@ def prompts_list():
 
 
 @app.route("/prompts/<int:prompt_id>")
+@login_required
 def prompt_detail(prompt_id: int):
     """View a specific prompt version."""
     if not get_db_available():
@@ -68,6 +73,7 @@ def prompt_detail(prompt_id: int):
 
 
 @app.route("/prompts/<int:prompt_id>/clone")
+@login_required
 def prompt_clone(prompt_id: int):
     """Clone a prompt version."""
     if not get_db_available():
@@ -82,6 +88,7 @@ def prompt_clone(prompt_id: int):
 
 
 @app.route("/api/prompts", methods=["POST"])
+@login_required
 def create_prompt():
     """Create a new prompt version (API endpoint)."""
     if not get_db_available():
@@ -126,6 +133,7 @@ def create_prompt():
 
 
 @app.route("/api/prompts/<int:prompt_id>/activate", methods=["POST"])
+@login_required
 def activate_prompt(prompt_id: int):
     """Set a prompt version as active (API endpoint)."""
     if not get_db_available():
@@ -145,6 +153,7 @@ def activate_prompt(prompt_id: int):
 
 
 @app.route("/api/prompts/<int:prompt_id>", methods=["DELETE"])
+@login_required
 def delete_prompt(prompt_id: int):
     """Delete a prompt version (API endpoint)."""
     if not get_db_available():
@@ -172,6 +181,7 @@ def delete_prompt(prompt_id: int):
 # =============================================================================
 
 @app.route("/runs")
+@login_required
 def runs_list():
     """List all evaluation runs."""
     if not get_db_available():
@@ -262,6 +272,7 @@ def runs_list():
 
 
 @app.route("/api/runs", methods=["POST"])
+@login_required
 def create_run():
     """Create and start a new evaluation run (API endpoint)."""
     if not get_db_available():
@@ -616,6 +627,7 @@ def run_judges_on_simulation(simulation_run_id: int, judge_model: str = "gpt-4.1
 
 
 @app.route("/api/runs/status")
+@login_required
 def get_runs_status():
     """Get status of all runs for polling updates."""
     if not get_db_available():
@@ -716,6 +728,7 @@ def get_runs_status():
 
 
 @app.route("/api/runs/<int:run_id>/judge", methods=["POST"])
+@login_required
 def run_judges_on_run(run_id: int):
     """Run judges on all conversations in a simulation run."""
     if not get_db_available():
@@ -753,6 +766,7 @@ def run_judges_on_run(run_id: int):
 
 
 @app.route("/")
+@login_required
 def index():
     """Redirect to runs page."""
     from flask import redirect
@@ -760,6 +774,7 @@ def index():
 
 
 @app.route("/api/version/<version_id>/status")
+@login_required
 def get_version_status(version_id: str):
     """Get the current status of a version/run for polling."""
     if not get_db_available():
@@ -847,6 +862,7 @@ def get_version_status(version_id: str):
 
 
 @app.route("/api/version/<version_id>/summary")
+@login_required
 def generate_version_summary(version_id: str):
     """Generate an AI summary of the run's performance with recommendations."""
     if not get_db_available():
@@ -988,6 +1004,7 @@ Be concise. Use bullet points. Reference specific personas when noting issues.
 
 
 @app.route("/version/<version_id>")
+@login_required
 def version_detail(version_id: str):
     """Detail page for a specific version."""
     version = get_version(version_id)
@@ -1013,6 +1030,7 @@ def version_detail(version_id: str):
 
 
 @app.route("/conversation/<session_id>")
+@login_required
 def conversation_detail(session_id: str):
     """Conversation inspector."""
     conversation = get_conversation(session_id)
@@ -1022,6 +1040,7 @@ def conversation_detail(session_id: str):
 
 
 @app.route("/conversation-by-file")
+@login_required
 def conversation_by_file():
     """Conversation inspector by filepath."""
     filepath = request.args.get("path")
@@ -1034,6 +1053,7 @@ def conversation_by_file():
 
 
 @app.route("/api/run-judges", methods=["POST"])
+@login_required
 def run_judges_api():
     """Run judges on a conversation (HTMX endpoint)."""
     data = request.json
