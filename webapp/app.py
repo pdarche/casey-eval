@@ -202,6 +202,7 @@ def runs_list():
         return render_template("runs.html", runs=[], prompts=[], error="Database not available")
 
     from eval.database import list_simulation_runs, list_prompt_versions, get_cursor
+    from datetime import datetime, timedelta
 
     runs = list_simulation_runs(limit=100)
     prompts = list_prompt_versions(active_only=False)
@@ -267,6 +268,12 @@ def runs_list():
             )
             has_judgments = cursor.fetchone()["count"] > 0
 
+            # Detect stale runs (running for >30 minutes)
+            is_stale = False
+            if run.status in ("running", "judging") and run.started_at:
+                elapsed = datetime.now() - run.started_at
+                is_stale = elapsed > timedelta(minutes=30)
+
             run_dict = {
                 "id": run.id,
                 "version": run.version,
@@ -279,6 +286,7 @@ def runs_list():
                 "avg_quality_score": avg_quality_score,
                 "avg_completeness": avg_completeness,
                 "has_judgments": has_judgments,
+                "is_stale": is_stale,
             }
             runs_with_counts.append(type('Run', (), run_dict)())
 
@@ -359,7 +367,7 @@ def run_evaluation_background(run_id: int, version: str, config: dict):
     )
     from eval.personas.edge_cases import get_personas_by_tag, ALL_EDGE_CASE_PERSONAS
     from eval.personas.generator import PersonaGenerator
-    from webapp.run_tracker import register_run, cleanup_run
+    from webapp.run_tracker import register_run, cleanup_run, is_cancelled, clear_cancelled
 
     # Initialize database pool for this thread
     init_pool()
@@ -401,11 +409,24 @@ def run_evaluation_background(run_id: int, version: str, config: dict):
                 futures.append(future)
 
             for future in concurrent.futures.as_completed(futures):
+                if is_cancelled(run_id):
+                    # Cancel remaining futures
+                    for f in futures:
+                        f.cancel()
+                    clear_cancelled(run_id)
+                    cleanup_run(run_id)
+                    return
                 try:
                     result = future.result()
                     results.append(result)
                 except Exception as e:
                     print(f"Error in conversation: {e}")
+
+        # Check cancellation after all futures complete
+        if is_cancelled(run_id):
+            clear_cancelled(run_id)
+            cleanup_run(run_id)
+            return
 
         # Update run status
         summary = {
@@ -441,7 +462,7 @@ def run_single_conversation_to_db(persona, max_turns: int, simulation_run_id: in
     from eval.simulation.client import SyntheticClient
     from eval.database import create_conversation
     from datetime import datetime
-    from webapp.run_tracker import start_conversation, update_turn_count, complete_conversation
+    from webapp.run_tracker import start_conversation, update_turn_count, complete_conversation, is_cancelled
 
     # Mark conversation as running in tracker
     start_conversation(simulation_run_id, conversation_id, persona)
@@ -489,6 +510,11 @@ def run_single_conversation_to_db(persona, max_turns: int, simulation_run_id: in
         turn_count = 0
 
         while turn_count < max_turns:
+            # Cooperative cancellation check
+            if is_cancelled(simulation_run_id):
+                completion_reason = "cancelled"
+                break
+
             turn_count += 1
 
             # Update turn count in tracker
@@ -844,8 +870,8 @@ def get_runs_status():
                 "avg_quality_score": avg_quality_score,
                 "avg_completeness": avg_completeness,
                 "has_judgments": total_judgments > 0,
-                "started_at": run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else None,
-                "completed_at": run.completed_at.strftime('%Y-%m-%d %H:%M') if run.completed_at else None,
+                "started_at": run.started_at.isoformat() if run.started_at else None,
+                "completed_at": run.completed_at.isoformat() if run.completed_at else None,
             }
 
             # Add conversation details if requested for this run
@@ -893,6 +919,55 @@ def run_judges_on_run(run_id: int):
         "success": True,
         "status": "judging"
     })
+
+
+@app.route("/api/runs/<int:run_id>/cancel", methods=["POST"])
+@login_required
+def cancel_run(run_id: int):
+    """Cancel a running, judging, or pending run."""
+    if not get_db_available():
+        return jsonify({"error": "Database not available"}), 500
+
+    from eval.database import get_simulation_run, update_simulation_run_status
+    from webapp.run_tracker import request_cancel
+
+    run = get_simulation_run(run_id)
+    if not run:
+        return jsonify({"error": "Run not found"}), 404
+
+    if run.status not in ("running", "judging", "pending"):
+        return jsonify({"error": f"Cannot cancel a run with status '{run.status}'"}), 400
+
+    # Set cancellation flag for cooperative thread shutdown
+    request_cancel(run_id)
+
+    # Update DB status
+    update_simulation_run_status(run_id, "cancelled")
+
+    return jsonify({"success": True, "status": "cancelled"})
+
+
+@app.route("/api/runs/<int:run_id>", methods=["DELETE"])
+@login_required
+def delete_run(run_id: int):
+    """Delete a run and all associated data."""
+    if not get_db_available():
+        return jsonify({"error": "Database not available"}), 500
+
+    from eval.database import get_simulation_run, delete_simulation_run
+
+    run = get_simulation_run(run_id)
+    if not run:
+        return jsonify({"error": "Run not found"}), 404
+
+    if run.status in ("running", "judging"):
+        return jsonify({"error": "Cannot delete a run that is still active. Cancel it first."}), 400
+
+    try:
+        delete_simulation_run(run_id)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/")

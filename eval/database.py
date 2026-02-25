@@ -268,7 +268,7 @@ def update_simulation_run_status(
                 SET status = %s, summary = %s, completed_at = %s
                 WHERE id = %s
                 """,
-                (status, Json(summary), datetime.now() if status in ("completed", "failed") else None, id)
+                (status, Json(summary), datetime.now() if status in ("completed", "failed", "cancelled") else None, id)
             )
         else:
             cursor.execute(
@@ -277,8 +277,40 @@ def update_simulation_run_status(
                 SET status = %s, completed_at = %s
                 WHERE id = %s
                 """,
-                (status, datetime.now() if status in ("completed", "failed") else None, id)
+                (status, datetime.now() if status in ("completed", "failed", "cancelled") else None, id)
             )
+
+
+def delete_simulation_run(id: int) -> None:
+    """Delete a simulation run and all associated data (FK-safe order)."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            # Delete judgments for conversations in this run
+            cursor.execute(
+                """DELETE FROM judgments
+                   WHERE conversation_id IN (
+                       SELECT id FROM conversations WHERE simulation_run_id = %s
+                   )""",
+                (id,)
+            )
+            # Delete judgment runs
+            cursor.execute(
+                "DELETE FROM judgment_runs WHERE simulation_run_id = %s",
+                (id,)
+            )
+            # Delete conversations
+            cursor.execute(
+                "DELETE FROM conversations WHERE simulation_run_id = %s",
+                (id,)
+            )
+            # Delete the simulation run
+            cursor.execute(
+                "DELETE FROM simulation_runs WHERE id = %s",
+                (id,)
+            )
+        finally:
+            cursor.close()
 
 
 # =============================================================================

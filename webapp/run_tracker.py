@@ -22,6 +22,9 @@ _lock = threading.Lock()
 # }
 _active_runs: dict[int, dict[str, Any]] = {}
 
+# Cancelled runs — checked cooperatively by background threads
+_cancelled_runs: set[int] = set()
+
 
 def register_run(run_id: int, personas: list[Any]) -> None:
     """
@@ -137,6 +140,51 @@ def cleanup_run(run_id: int) -> None:
     with _lock:
         if run_id in _active_runs:
             del _active_runs[run_id]
+
+
+def request_cancel(run_id: int) -> None:
+    """
+    Request cancellation of a run.
+
+    Sets the cancellation flag and removes from active tracking.
+    Background threads should check is_cancelled() cooperatively.
+
+    Args:
+        run_id: The simulation run ID
+    """
+    with _lock:
+        _cancelled_runs.add(run_id)
+        if run_id in _active_runs:
+            del _active_runs[run_id]
+
+
+def is_cancelled(run_id: int) -> bool:
+    """
+    Check if a run has been cancelled.
+
+    Called by background threads to cooperatively stop processing.
+
+    Args:
+        run_id: The simulation run ID
+
+    Returns:
+        True if the run has been cancelled.
+    """
+    with _lock:
+        return run_id in _cancelled_runs
+
+
+def clear_cancelled(run_id: int) -> None:
+    """
+    Remove a run from the cancelled set.
+
+    Called after a thread has acknowledged the cancellation.
+
+    Args:
+        run_id: The simulation run ID
+    """
+    with _lock:
+        _cancelled_runs.discard(run_id)
 
 
 def _persona_to_dict(persona: Any) -> dict[str, Any]:

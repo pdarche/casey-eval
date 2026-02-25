@@ -70,6 +70,10 @@
                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
                             Completed
                         </span>
+                    {% elif run.status == 'running' and run.is_stale %}
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800" title="Running for over 30 minutes — may be stuck">
+                            &#9888; May be stuck
+                        </span>
                     {% elif run.status == 'running' %}
                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
                             Running
@@ -81,6 +85,10 @@
                     {% elif run.status == 'failed' %}
                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
                             Failed
+                        </span>
+                    {% elif run.status == 'cancelled' %}
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">
+                            Cancelled
                         </span>
                     {% else %}
                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
@@ -135,8 +143,22 @@
                     {% if run.status == 'completed' %}
                     <button
                         onclick="runJudges({{ run.id }}, '{{ run.version }}')"
-                        class="text-purple-600 hover:text-purple-800">
+                        class="text-purple-600 hover:text-purple-800 mr-3">
                         {% if run.has_judgments %}Re-judge{% else %}Run Judges{% endif %}
+                    </button>
+                    {% endif %}
+                    {% if run.status in ['running', 'judging', 'pending'] %}
+                    <button
+                        onclick="cancelRun({{ run.id }}, '{{ run.version }}')"
+                        class="text-orange-600 hover:text-orange-800 mr-3">
+                        Cancel
+                    </button>
+                    {% endif %}
+                    {% if run.status in ['completed', 'failed', 'cancelled'] %}
+                    <button
+                        onclick="deleteRun({{ run.id }}, '{{ run.version }}')"
+                        class="text-red-600 hover:text-red-800">
+                        Delete
                     </button>
                     {% endif %}
                 </td>
@@ -444,7 +466,7 @@ async function pollRunStatus() {
             // Update status badge
             const statusCell = row.querySelector('.run-status');
             if (statusCell) {
-                statusCell.innerHTML = getStatusBadge(run.status);
+                statusCell.innerHTML = getStatusBadge(run.status, run);
             }
 
             // Update progress
@@ -520,12 +542,22 @@ async function pollRunStatus() {
     }
 }
 
-function getStatusBadge(status) {
+function getStatusBadge(status, run) {
+    // Stale detection for running/judging runs
+    if ((status === 'running' || status === 'judging') && run && run.started_at) {
+        const startedAt = new Date(run.started_at);
+        const elapsed = Date.now() - startedAt.getTime();
+        if (elapsed > 30 * 60 * 1000) {
+            return '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800" title="Running for over 30 minutes — may be stuck">&#9888; May be stuck</span>';
+        }
+    }
+
     const badges = {
         'completed': '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Completed</span>',
         'running': '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">Running</span>',
         'judging': '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800 animate-pulse">Judging</span>',
         'failed': '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Failed</span>',
+        'cancelled': '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">Cancelled</span>',
         'pending': '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Pending</span>'
     };
     return badges[status] || badges['pending'];
@@ -585,7 +617,13 @@ function getActionsHtml(run) {
     let html = `<a href="/version/${run.version}" class="text-blue-600 hover:text-blue-800 mr-3">View</a>`;
     if (run.status === 'completed') {
         const buttonText = run.has_judgments ? 'Re-judge' : 'Run Judges';
-        html += `<button onclick="runJudges(${run.id}, '${run.version}')" class="text-purple-600 hover:text-purple-800">${buttonText}</button>`;
+        html += `<button onclick="runJudges(${run.id}, '${run.version}')" class="text-purple-600 hover:text-purple-800 mr-3">${buttonText}</button>`;
+    }
+    if (run.status === 'running' || run.status === 'judging' || run.status === 'pending') {
+        html += `<button onclick="cancelRun(${run.id}, '${run.version}')" class="text-orange-600 hover:text-orange-800 mr-3">Cancel</button>`;
+    }
+    if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
+        html += `<button onclick="deleteRun(${run.id}, '${run.version}')" class="text-red-600 hover:text-red-800">Delete</button>`;
     }
     return html;
 }
@@ -616,7 +654,7 @@ function addRunRow(run) {
                 <a href="/version/${run.version}" class="text-blue-600 hover:text-blue-800 font-medium">${run.version}</a>
             </div>
         </td>
-        <td class="px-6 py-4 whitespace-nowrap run-status">${getStatusBadge(run.status)}</td>
+        <td class="px-6 py-4 whitespace-nowrap run-status">${getStatusBadge(run.status, run)}</td>
         <td class="px-6 py-4 whitespace-nowrap run-progress">${getProgressHtml(run)}</td>
         <td class="px-6 py-4 whitespace-nowrap text-sm run-safety">${getSafetyHtml(run)}</td>
         <td class="px-6 py-4 whitespace-nowrap text-sm run-quality">${getQualityHtml(run)}</td>
@@ -705,6 +743,65 @@ document.getElementById('create-form').addEventListener('submit', async function
     }
 });
 
+// Cancel a running/judging/pending run
+async function cancelRun(runId, version) {
+    if (!confirm('Cancel evaluation run "' + version + '"? Running conversations will be stopped.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/runs/' + runId + '/cancel', {
+            method: 'POST'
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            startPolling();
+            pollRunStatus();
+        } else {
+            alert('Error: ' + (result.error || 'Failed to cancel run'));
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+// Delete a completed/failed/cancelled run
+async function deleteRun(runId, version) {
+    if (!confirm('Delete evaluation run "' + version + '" and all its data? This cannot be undone.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/runs/' + runId, {
+            method: 'DELETE'
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            // Remove both the data row and the details row from the DOM
+            const row = document.querySelector(`tr[data-run-id="${runId}"]:not(.conversation-details)`);
+            const detailsRow = document.querySelector(`tr.conversation-details[data-run-id="${runId}"]`);
+            if (row) row.remove();
+            if (detailsRow) detailsRow.remove();
+            expandedRuns.delete(runId);
+
+            // Show empty state if no runs left
+            const tbody = document.getElementById('runs-table-body');
+            if (tbody && tbody.children.length === 0) {
+                const emptyState = document.getElementById('empty-state');
+                if (emptyState) emptyState.classList.remove('hidden');
+            }
+        } else {
+            alert('Error: ' + (result.error || 'Failed to delete run'));
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
 // Run judges on a completed run
 async function runJudges(runId, version) {
     if (!confirm('Run judges on all conversations in "' + version + '"? This may take several minutes.')) {
@@ -745,9 +842,10 @@ document.getElementById('create-modal').addEventListener('click', function(e) {
     }
 });
 
-// Start polling if there are running jobs
+// Start polling if there are active jobs
 document.addEventListener('DOMContentLoaded', function() {
-    const hasRunning = document.querySelector('.run-status .animate-pulse');
+    const hasRunning = document.querySelector('.run-status .animate-pulse') ||
+                       document.querySelector('.run-status .bg-blue-100');
     if (hasRunning) {
         startPolling();
     }
