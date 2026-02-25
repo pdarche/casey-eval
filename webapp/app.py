@@ -201,8 +201,9 @@ def runs_list():
     if not get_db_available():
         return render_template("runs.html", runs=[], prompts=[], error="Database not available")
 
-    from eval.database import list_simulation_runs, list_prompt_versions, get_cursor
-    from datetime import datetime, timedelta
+    from eval.database import list_simulation_runs, list_prompt_versions, get_cursor, update_simulation_run_status
+    from datetime import datetime, timedelta, timezone
+    from webapp.run_tracker import is_run_active
 
     runs = list_simulation_runs(limit=100)
     prompts = list_prompt_versions(active_only=False)
@@ -217,6 +218,15 @@ def runs_list():
             )
             count = cursor.fetchone()["count"]
             target_count = run.config.get("count", 10) if run.config else 10
+
+            # Detect orphaned runs: status is running/judging but no active thread
+            if run.status in ("running", "judging") and not is_run_active(run.id):
+                if count >= target_count:
+                    summary = run.summary or {}
+                    summary["auto_completed"] = True
+                    summary["original_status"] = run.status
+                    update_simulation_run_status(run.id, "completed", summary)
+                    run.status = "completed"
 
             # Get metrics for completed runs
             safety_pass_rate = None
@@ -271,7 +281,7 @@ def runs_list():
             # Detect stale runs (running for >30 minutes)
             is_stale = False
             if run.status in ("running", "judging") and run.started_at:
-                elapsed = datetime.now() - run.started_at
+                elapsed = datetime.now(timezone.utc) - run.started_at
                 is_stale = elapsed > timedelta(minutes=30)
 
             run_dict = {
@@ -778,7 +788,8 @@ def get_runs_status():
     if not get_db_available():
         return jsonify([])
 
-    from eval.database import list_simulation_runs, get_cursor
+    from eval.database import list_simulation_runs, get_cursor, update_simulation_run_status
+    from webapp.run_tracker import is_run_active
 
     # Check if conversation details are requested
     include_convs = request.args.get("include_conversations") == "true"
@@ -808,6 +819,17 @@ def get_runs_status():
 
             # Get target count from config
             target_count = run.config.get("count", 10) if run.config else 10
+
+            # Detect orphaned runs: status is running/judging in DB but no
+            # active background thread. This happens if the thread crashed
+            # or the server restarted. Auto-transition to completed.
+            if run.status in ("running", "judging") and not is_run_active(run.id):
+                if conv_count >= target_count:
+                    summary = run.summary or {}
+                    summary["auto_completed"] = True
+                    summary["original_status"] = run.status
+                    update_simulation_run_status(run.id, "completed", summary)
+                    run.status = "completed"
 
             # Get metrics for completed runs
             safety_pass_rate = None
@@ -919,6 +941,187 @@ def run_judges_on_run(run_id: int):
         "success": True,
         "status": "judging"
     })
+
+
+@app.route("/api/conversations/<int:conversation_id>/rejudge", methods=["POST"])
+@login_required
+def rejudge_conversation(conversation_id: int):
+    """Re-judge a single conversation."""
+    if not get_db_available():
+        return jsonify({"error": "Database not available"}), 500
+
+    from eval.database import get_conversation, get_cursor, get_simulation_run, create_judgment
+    from eval.judges.base import ConversationContext, ConversationTurn
+    from eval.judges.safety import SafetyEvaluator
+    from eval.judges.quality import QualityEvaluator
+    from eval.judges.completeness import CompletenessEvaluator
+
+    conv = get_conversation(conversation_id)
+    if not conv:
+        return jsonify({"error": "Conversation not found"}), 404
+
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    if not openai_key:
+        return jsonify({"error": "OPENAI_API_KEY not configured"}), 500
+
+    # Get judge model from the simulation run config
+    judge_model = "gpt-4.1"
+    prompt_version_id = None
+    if conv.simulation_run_id:
+        sim_run = get_simulation_run(conv.simulation_run_id)
+        if sim_run:
+            judge_model = (sim_run.config or {}).get("judge_model", "gpt-4.1")
+            prompt_version_id = sim_run.prompt_version_id
+
+    from webapp.run_tracker import start_judging_conversation, complete_judging_conversation
+
+    start_judging_conversation(conversation_id)
+
+    import threading
+
+    def rejudge_background():
+        from eval.database import init_pool
+        from openai import OpenAI
+        init_pool()
+
+        try:
+            llm_client = OpenAI(api_key=openai_key)
+
+            # Clear existing judgments for this conversation
+            with get_cursor() as cursor:
+                cursor.execute("DELETE FROM judgments WHERE conversation_id = %s", (conversation_id,))
+
+            # Build context
+            turns = []
+            for msg in conv.transcript:
+                role = "assistant" if msg["role"] == "casey" else "user"
+                turns.append(ConversationTurn(role=role, content=msg["content"]))
+            context = ConversationContext(turns=turns, persona=conv.persona)
+
+            # Run judges
+            safety_eval = SafetyEvaluator(llm_client=llm_client, model=judge_model)
+            quality_eval = QualityEvaluator(llm_client=llm_client, model=judge_model)
+            completeness_eval = CompletenessEvaluator(llm_client=llm_client, model=judge_model, prompt_version_id=prompt_version_id)
+
+            for result in safety_eval.evaluate_all(context):
+                create_judgment(
+                    conversation_id=conversation_id,
+                    judge_type="safety", judge_id=result.judge_id,
+                    verdict=result.verdict.value, score=result.score,
+                    reasoning=result.reasoning, evidence=result.evidence,
+                    metadata=result.metadata or {},
+                )
+            for result in quality_eval.evaluate_all(context):
+                create_judgment(
+                    conversation_id=conversation_id,
+                    judge_type="quality", judge_id=result.judge_id,
+                    verdict=result.verdict.value, score=result.score,
+                    reasoning=result.reasoning, evidence=result.evidence,
+                    metadata=result.metadata or {},
+                )
+            result = completeness_eval.evaluate(context)
+            create_judgment(
+                conversation_id=conversation_id,
+                judge_type="completeness", judge_id=result.judge_id,
+                verdict=result.verdict.value, score=result.score,
+                reasoning=result.reasoning, evidence=result.evidence,
+                metadata=result.metadata or {},
+            )
+
+            complete_judging_conversation(conversation_id)
+        except Exception as e:
+            print(f"Error re-judging conversation {conversation_id}: {e}")
+            complete_judging_conversation(conversation_id, error=True)
+
+    thread = threading.Thread(target=rejudge_background, daemon=True)
+    thread.start()
+
+    return jsonify({"success": True, "status": "judging"})
+
+
+@app.route("/api/conversations/judging-status")
+@login_required
+def get_conversations_judging_status():
+    """Poll judging status for a set of conversation IDs."""
+    from webapp.run_tracker import get_judging_status, clear_judging_conversation
+
+    ids_param = request.args.get("ids", "")
+    if not ids_param:
+        return jsonify({})
+
+    try:
+        conversation_ids = [int(x) for x in ids_param.split(",") if x]
+    except ValueError:
+        return jsonify({}), 400
+
+    statuses = get_judging_status(conversation_ids)
+
+    # Client can acknowledge completed entries to clean them up
+    ack_param = request.args.get("ack", "")
+    if ack_param:
+        try:
+            ack_ids = [int(x) for x in ack_param.split(",") if x]
+            for cid in ack_ids:
+                clear_judging_conversation(cid)
+        except ValueError:
+            pass
+
+    return jsonify({str(k): v for k, v in statuses.items()})
+
+
+@app.route("/api/runs/<int:run_id>/rerun", methods=["POST"])
+@login_required
+def rerun_run(run_id: int):
+    """Re-run an evaluation with the same config but a new version name."""
+    if not get_db_available():
+        return jsonify({"error": "Database not available"}), 500
+
+    from eval.database import (
+        get_simulation_run, create_simulation_run,
+        get_simulation_run_by_version
+    )
+
+    run = get_simulation_run(run_id)
+    if not run:
+        return jsonify({"error": "Run not found"}), 404
+
+    # Check required environment variables
+    required_env = ["CASEY_API_URL", "SALESFORCE_CLIENT_ID", "SALESFORCE_CLIENT_SECRET",
+                    "AGENTFORCE_AGENT_ID", "OPENAI_API_KEY"]
+    missing = [v for v in required_env if not os.environ.get(v)]
+    if missing:
+        return jsonify({"error": f"Missing environment variables: {', '.join(missing)}"}), 500
+
+    # Generate new version name: original-rerun-N
+    base_version = run.version.split("-rerun-")[0]
+    suffix = 2
+    new_version = f"{base_version}-rerun-{suffix}"
+    while get_simulation_run_by_version(new_version):
+        suffix += 1
+        new_version = f"{base_version}-rerun-{suffix}"
+
+    config = run.config or {}
+
+    try:
+        new_run_id = create_simulation_run(
+            version=new_version,
+            config=config,
+            prompt_version_id=run.prompt_version_id,
+            status="running",
+        )
+
+        import threading
+        thread = threading.Thread(
+            target=run_evaluation_background,
+            args=(new_run_id, new_version, config),
+            daemon=True
+        )
+        thread.start()
+
+        return jsonify({"id": new_run_id, "version": new_version, "status": "running"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/runs/<int:run_id>/cancel", methods=["POST"])

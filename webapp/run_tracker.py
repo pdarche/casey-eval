@@ -25,6 +25,9 @@ _active_runs: dict[int, dict[str, Any]] = {}
 # Cancelled runs — checked cooperatively by background threads
 _cancelled_runs: set[int] = set()
 
+# Per-conversation judging status: conversation_id -> "judging" | "done" | "error"
+_judging_conversations: dict[int, str] = {}
+
 
 def register_run(run_id: int, personas: list[Any]) -> None:
     """
@@ -185,6 +188,55 @@ def clear_cancelled(run_id: int) -> None:
     """
     with _lock:
         _cancelled_runs.discard(run_id)
+
+
+def is_run_active(run_id: int) -> bool:
+    """
+    Check if a run is actively being tracked in memory.
+
+    If a run shows as 'running' or 'judging' in the DB but is NOT active
+    in memory, the background thread has died and the run is orphaned.
+
+    Args:
+        run_id: The simulation run ID
+
+    Returns:
+        True if the run is being tracked (thread is alive).
+    """
+    with _lock:
+        return run_id in _active_runs
+
+
+def start_judging_conversation(conversation_id: int) -> None:
+    """Mark a conversation as currently being judged."""
+    with _lock:
+        _judging_conversations[conversation_id] = "judging"
+
+
+def complete_judging_conversation(conversation_id: int, error: bool = False) -> None:
+    """Mark a conversation judging as finished."""
+    with _lock:
+        _judging_conversations[conversation_id] = "error" if error else "done"
+
+
+def get_judging_status(conversation_ids: list[int]) -> dict[int, str]:
+    """Get judging status for a list of conversation IDs.
+
+    Returns dict of conversation_id -> status for any that are tracked.
+    Conversations not in the tracker are omitted.
+    """
+    with _lock:
+        return {
+            cid: _judging_conversations[cid]
+            for cid in conversation_ids
+            if cid in _judging_conversations
+        }
+
+
+def clear_judging_conversation(conversation_id: int) -> None:
+    """Remove a conversation from the judging tracker."""
+    with _lock:
+        _judging_conversations.pop(conversation_id, None)
 
 
 def _persona_to_dict(persona: Any) -> dict[str, Any]:

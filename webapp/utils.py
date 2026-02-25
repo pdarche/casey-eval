@@ -59,6 +59,7 @@ class ConversationSummary:
     intake_completeness: Optional[float] = None  # 0-1 completion rate
     intake_steps_completed: Optional[int] = None
     intake_steps_total: Optional[int] = None
+    conversation_id: Optional[int] = None
 
 
 @dataclass
@@ -163,6 +164,7 @@ def list_versions(transcripts_dir: Path = None) -> List[VersionSummary]:
                             intake_completeness=c.intake_completeness,
                             intake_steps_completed=c.intake_steps_completed,
                             intake_steps_total=c.intake_steps_total,
+                            conversation_id=c.conversation_id,
                         )
                         for c in v.conversations
                     ]
