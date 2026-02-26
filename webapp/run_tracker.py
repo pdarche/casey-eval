@@ -29,22 +29,47 @@ _cancelled_runs: set[int] = set()
 _judging_conversations: dict[int, str] = {}
 
 
+def register_run_generating(run_id: int, count: int) -> None:
+    """
+    Register a new run as generating personas.
+
+    Called at the start of a run, before persona generation begins.
+
+    Args:
+        run_id: The simulation run ID
+        count: The requested number of personas
+    """
+    with _lock:
+        _active_runs[run_id] = {
+            "phase": "generating",
+            "target_count": count,
+            "personas": [],
+            "active": {},
+            "completed_indices": set(),
+        }
+
+
 def register_run(run_id: int, personas: list[Any]) -> None:
     """
-    Register a new run with its persona list.
+    Register a run's persona list and transition to conversation phase.
 
-    Called when a run starts, before any conversations begin.
+    Called after persona generation completes, before conversations begin.
 
     Args:
         run_id: The simulation run ID
         personas: List of persona objects/dicts for this run
     """
     with _lock:
-        _active_runs[run_id] = {
-            "personas": [_persona_to_dict(p) for p in personas],
-            "active": {},
-            "completed_indices": set(),
-        }
+        if run_id in _active_runs:
+            _active_runs[run_id]["phase"] = "running"
+            _active_runs[run_id]["personas"] = [_persona_to_dict(p) for p in personas]
+        else:
+            _active_runs[run_id] = {
+                "phase": "running",
+                "personas": [_persona_to_dict(p) for p in personas],
+                "active": {},
+                "completed_indices": set(),
+            }
 
 
 def start_conversation(run_id: int, index: int, persona: Any) -> None:
@@ -125,6 +150,8 @@ def get_run_progress(run_id: int) -> dict[str, Any] | None:
 
         run = _active_runs[run_id]
         return {
+            "phase": run.get("phase", "running"),
+            "target_count": run.get("target_count", len(run["personas"])),
             "personas": run["personas"],
             "active": dict(run["active"]),
             "completed_indices": set(run["completed_indices"]),

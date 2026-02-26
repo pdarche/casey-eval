@@ -380,7 +380,7 @@ def run_evaluation_background(run_id: int, version: str, config: dict):
     from openai import OpenAI
     from eval.personas.config import PersonaGenerationConfig
     from eval.personas.generator import PersonaGenerator
-    from webapp.run_tracker import register_run, cleanup_run, is_cancelled, clear_cancelled
+    from webapp.run_tracker import register_run, register_run_generating, cleanup_run, is_cancelled, clear_cancelled
 
     # Initialize database pool for this thread
     init_pool()
@@ -388,6 +388,9 @@ def run_evaluation_background(run_id: int, version: str, config: dict):
     try:
         # Get personas
         count = config.get("count", 10)
+
+        # Register run as generating (visible to status polling)
+        register_run_generating(run_id, count)
 
         persona_cfg = PersonaGenerationConfig.from_dict(config.get("persona_config", {}))
         openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
@@ -650,8 +653,10 @@ def run_judges_on_simulation(simulation_run_id: int, judge_model: str = "gpt-5-m
             (simulation_run_id,)
         )
 
-    for conv in conversations:
-        # Convert to context
+    import concurrent.futures
+
+    def judge_conversation(conv):
+        """Run all judges on a single conversation."""
         turns = []
         for msg in conv.transcript:
             role = "assistant" if msg["role"] == "casey" else "user"
@@ -659,16 +664,45 @@ def run_judges_on_simulation(simulation_run_id: int, judge_model: str = "gpt-5-m
 
         context = ConversationContext(turns=turns, persona=conv.persona)
 
-        # Run judges
+        # Each conversation gets its own evaluator instances
         safety_eval = SafetyEvaluator(llm_client=llm_client, model=judge_model)
         quality_eval = QualityEvaluator(llm_client=llm_client, model=judge_model)
         completeness_eval = CompletenessEvaluator(llm_client=llm_client, model=judge_model, prompt_version_id=prompt_version_id)
 
-        # Safety judgments
-        for result in safety_eval.evaluate_all(context):
+        # Run all three judge types in parallel
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as judge_executor:
+            safety_future = judge_executor.submit(safety_eval.evaluate_all, context)
+            quality_future = judge_executor.submit(quality_eval.evaluate_all, context)
+            completeness_future = judge_executor.submit(completeness_eval.evaluate, context)
+
+            for result in safety_future.result():
+                create_judgment(
+                    conversation_id=conv.id,
+                    judge_type="safety",
+                    judge_id=result.judge_id,
+                    verdict=result.verdict.value,
+                    score=result.score,
+                    reasoning=result.reasoning,
+                    evidence=result.evidence,
+                    metadata=result.metadata or {},
+                )
+
+            for result in quality_future.result():
+                create_judgment(
+                    conversation_id=conv.id,
+                    judge_type="quality",
+                    judge_id=result.judge_id,
+                    verdict=result.verdict.value,
+                    score=result.score,
+                    reasoning=result.reasoning,
+                    evidence=result.evidence,
+                    metadata=result.metadata or {},
+                )
+
+            result = completeness_future.result()
             create_judgment(
                 conversation_id=conv.id,
-                judge_type="safety",
+                judge_type="completeness",
                 judge_id=result.judge_id,
                 verdict=result.verdict.value,
                 score=result.score,
@@ -677,31 +711,15 @@ def run_judges_on_simulation(simulation_run_id: int, judge_model: str = "gpt-5-m
                 metadata=result.metadata or {},
             )
 
-        # Quality judgments
-        for result in quality_eval.evaluate_all(context):
-            create_judgment(
-                conversation_id=conv.id,
-                judge_type="quality",
-                judge_id=result.judge_id,
-                verdict=result.verdict.value,
-                score=result.score,
-                reasoning=result.reasoning,
-                evidence=result.evidence,
-                metadata=result.metadata or {},
-            )
-
-        # Completeness judgment
-        result = completeness_eval.evaluate(context)
-        create_judgment(
-            conversation_id=conv.id,
-            judge_type="completeness",
-            judge_id=result.judge_id,
-            verdict=result.verdict.value,
-            score=result.score,
-            reasoning=result.reasoning,
-            evidence=result.evidence,
-            metadata=result.metadata or {},
-        )
+    # Judge all conversations in parallel (up to 5 at a time)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(judge_conversation, conv): conv for conv in conversations}
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                future.result()
+            except Exception as e:
+                conv = futures[future]
+                print(f"Error judging conversation {conv.id}: {e}", flush=True)
 
 
 def get_conversations_for_run_status(run_id: int, run_status: str = "running") -> list:
@@ -900,6 +918,13 @@ def get_runs_status():
                 "started_at": run.started_at.isoformat() if run.started_at else None,
                 "completed_at": run.completed_at.isoformat() if run.completed_at else None,
             }
+
+            # Add run phase from in-memory tracker
+            if run.status == "running":
+                from webapp.run_tracker import get_run_progress
+                progress = get_run_progress(run.id)
+                if progress:
+                    run_data["phase"] = progress.get("phase", "running")
 
             # Add conversation details if requested for this run
             if str(run.id) in expanded_run_ids and run.status in ("running", "judging"):

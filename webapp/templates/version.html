@@ -377,10 +377,11 @@ async function generateSummary() {
 </script>
 
 <!-- Conversations Table -->
-<div class="bg-white rounded-lg shadow overflow-hidden">
+<div class="bg-white rounded-lg shadow">
     <div class="px-6 py-4 border-b">
         <h2 class="text-lg font-semibold text-gray-800">Conversations</h2>
     </div>
+    <div class="overflow-x-auto">
     <table class="min-w-full divide-y divide-gray-200">
         <thead class="bg-gray-50">
             <tr>
@@ -519,5 +520,6 @@ async function generateSummary() {
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </div>
 {% endblock %}
