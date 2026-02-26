@@ -1423,10 +1423,15 @@ Be concise. Use bullet points. Reference specific personas when noting issues.
     try:
         response = client.chat.completions.create(
             model="gpt-5",
-            messages=[{"role": "user", "content": prompt}],
-            max_completion_tokens=1000,
+            messages=[
+                {"role": "system", "content": "You are an evaluation analyst reviewing AI agent performance. Provide concise, actionable analysis in markdown."},
+                {"role": "user", "content": prompt},
+            ],
+            max_completion_tokens=8000,
         )
         summary = response.choices[0].message.content
+        if not summary:
+            return jsonify({"error": "LLM returned empty response"}), 500
 
         # Save summary to database
         with get_cursor() as cursor:

@@ -162,10 +162,14 @@ class BaseJudge(ABC):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            max_completion_tokens=1024,
+            max_completion_tokens=4096,
+            response_format={"type": "json_object"},
         )
 
-        return response.choices[0].message.content
+        content = response.choices[0].message.content
+        if not content:
+            raise ValueError(f"LLM returned empty response (model={self.model})")
+        return content
 
     def _parse_llm_json_response(self, response: str) -> dict:
         """
