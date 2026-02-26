@@ -970,12 +970,12 @@ def rejudge_conversation(conversation_id: int):
         return jsonify({"error": "OPENAI_API_KEY not configured"}), 500
 
     # Get judge model from the simulation run config
-    judge_model = "gpt-4.1"
+    judge_model = "gpt-5-mini"
     prompt_version_id = None
     if conv.simulation_run_id:
         sim_run = get_simulation_run(conv.simulation_run_id)
         if sim_run:
-            judge_model = (sim_run.config or {}).get("judge_model", "gpt-4.1")
+            judge_model = (sim_run.config or {}).get("judge_model", "gpt-5-mini")
             prompt_version_id = sim_run.prompt_version_id
 
     from webapp.run_tracker import start_judging_conversation, complete_judging_conversation
