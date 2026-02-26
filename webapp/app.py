@@ -340,7 +340,7 @@ def create_run():
         config = {
             "count": data.get("count", 10),
             "persona_config": data.get("persona_config", {}),
-            "max_turns": data.get("max_turns", 50),
+            "max_turns": data.get("max_turns", 30),
             "parallel": data.get("parallel", 5),
             "client_model": data.get("client_model", "gpt-4.1-mini"),
             "judge_model": data.get("judge_model", "gpt-5-mini"),
@@ -404,7 +404,7 @@ def run_evaluation_background(run_id: int, version: str, config: dict):
 
         # Run conversations
         import concurrent.futures
-        max_turns = config.get("max_turns", 50)
+        max_turns = config.get("max_turns", 30)
         parallel = config.get("parallel", 5)
         client_model = config.get("client_model", "gpt-4.1-mini")
 

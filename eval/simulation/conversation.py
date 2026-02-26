@@ -252,7 +252,7 @@ class AgentforceConversationRunner:
     def run(
         self,
         persona: Persona,
-        max_turns: int = 100,
+        max_turns: int = 30,
         turn_delay: float = 0.5,
         on_turn: Optional[Callable[[int, str, str], None]] = None,
     ) -> ConversationResult:
@@ -388,7 +388,7 @@ class AgentforceConversationRunner:
     def run_batch(
         self,
         personas: list[Persona],
-        max_turns: int = 100,
+        max_turns: int = 30,
         turn_delay: float = 0.5,
         on_conversation_complete: Optional[Callable[[int, ConversationResult], None]] = None,
     ) -> list[ConversationResult]:
@@ -485,7 +485,7 @@ class ConversationRunner:
     def run(
         self,
         persona: Persona,
-        max_turns: int = 100,
+        max_turns: int = 30,
         turn_delay: float = 0.5,
         on_turn: Optional[Callable[[int, str, str], None]] = None,
     ) -> ConversationResult:
@@ -624,7 +624,7 @@ class ConversationRunner:
     def run_batch(
         self,
         personas: list[Persona],
-        max_turns: int = 100,
+        max_turns: int = 30,
         turn_delay: float = 0.5,
         on_conversation_complete: Optional[Callable[[int, ConversationResult], None]] = None,
     ) -> list[ConversationResult]:

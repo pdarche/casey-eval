@@ -43,7 +43,7 @@ def get_persona(language: str = None, legal_issue: str = None):
     return generator.generate_random_persona()
 
 
-def run_conversation(persona, max_turns: int = 50, verbose: bool = True, output_dir: str = None):
+def run_conversation(persona, max_turns: int = 30, verbose: bool = True, output_dir: str = None):
     """Run a simulated conversation between synthetic client and Casey."""
     from agent_sdk import Agentforce
     from openai import OpenAI
@@ -213,7 +213,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run a simulated conversation with Casey")
     parser.add_argument("--language", default=None, help="Pin persona language (e.g., Spanish)")
     parser.add_argument("--legal-issue", default=None, help="Pin persona legal issue (e.g., Housing)")
-    parser.add_argument("--max-turns", "-m", type=int, default=50, help="Maximum turns")
+    parser.add_argument("--max-turns", "-m", type=int, default=30, help="Maximum turns")
     parser.add_argument("--output", "-o", default="transcripts", help="Output directory for transcripts")
     parser.add_argument("--no-save", action="store_true", help="Don't save transcript to file")
     parser.add_argument("--quiet", "-q", action="store_true", help="Less verbose output")

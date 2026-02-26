@@ -178,7 +178,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run multiple conversations in parallel")
     parser.add_argument("--count", "-n", type=int, default=10, help="Number of conversations to run")
     parser.add_argument("--parallel", "-p", type=int, default=10, help="Max parallel conversations")
-    parser.add_argument("--max-turns", "-m", type=int, default=50, help="Max turns per conversation")
+    parser.add_argument("--max-turns", "-m", type=int, default=30, help="Max turns per conversation")
     parser.add_argument("--output", "-o", default="transcripts", help="Output directory")
     parser.add_argument("--language", default=None, help="Pin all personas to a language (e.g., Spanish)")
     parser.add_argument("--legal-issue", default=None, help="Pin all personas to a legal issue (e.g., Housing)")

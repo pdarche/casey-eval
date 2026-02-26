@@ -42,7 +42,7 @@ class EvaluationConfig:
     use_agentforce: bool = False  # Explicitly use Agentforce API
 
     # Conversation settings
-    max_turns_per_conversation: int = 100
+    max_turns_per_conversation: int = 30
     turn_delay: float = 0.5
 
     # Persona settings
