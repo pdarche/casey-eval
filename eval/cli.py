@@ -3,8 +3,8 @@ CLI interface for the Casey evaluation suite.
 
 Usage:
     python -m eval.cli run-eval --conversations 10 --output results.json
-    python -m eval.cli run-single --persona "CRISIS_DV_DISCLOSURE" --preview
-    python -m eval.cli list-personas
+    python -m eval.cli run-single --language Spanish --preview
+    python -m eval.cli list-personas --language Spanish -n 5
     python -m eval.cli list-rules
 """
 
@@ -34,8 +34,11 @@ def cli():
 @click.option("--api-url", envvar="CASEY_API_URL", required=True, help="Salesforce My Domain URL or legacy API URL")
 @click.option("--api-key", envvar="CASEY_API_KEY", default=None, help="Access token (Agentforce) or API key (legacy)")
 @click.option("--agent-id", envvar="AGENTFORCE_AGENT_ID", default=None, help="Agentforce 18-char agent ID")
-@click.option("--include-edge-cases/--no-edge-cases", default=True, help="Include edge case personas")
-@click.option("--judge-model", default="gpt-4o", help="Model for LLM judges")
+@click.option("--language", default=None, help="Pin all personas to a language (e.g., Spanish, Español)")
+@click.option("--legal-issue", default=None, help="Pin all personas to a legal issue (e.g., Housing)")
+@click.option("--scenarios", default=None, help='JSON string of scenario slots, e.g., \'{"discloses_dv": 3}\'')
+@click.option("--persona-config-file", default=None, type=click.Path(exists=True), help="Path to persona config JSON file")
+@click.option("--judge-model", default="gpt-5-mini", help="Model for LLM judges")
 @click.option("--client-model", default="gpt-4.1-mini", help="Model for synthetic client")
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
 def run_eval(
@@ -44,7 +47,10 @@ def run_eval(
     api_url: str,
     api_key: str,
     agent_id: str,
-    include_edge_cases: bool,
+    language: str,
+    legal_issue: str,
+    scenarios: str,
+    persona_config_file: str,
     judge_model: str,
     client_model: str,
     verbose: bool,
@@ -63,6 +69,7 @@ def run_eval(
         return
 
     from eval.runner import EvaluationRunner, EvaluationConfig
+    from eval.personas.config import PersonaGenerationConfig
 
     # Get OpenAI API key
     openai_key = os.environ.get("OPENAI_API_KEY")
@@ -71,6 +78,20 @@ def run_eval(
         return
 
     llm_client = OpenAI(api_key=openai_key)
+
+    # Build persona config
+    if persona_config_file:
+        config_data = json.loads(Path(persona_config_file).read_text())
+        persona_cfg = PersonaGenerationConfig.from_dict(config_data)
+    else:
+        config_data = {}
+        if language:
+            config_data["language"] = language
+        if legal_issue:
+            config_data["legal_issue"] = legal_issue
+        if scenarios:
+            config_data["scenarios"] = json.loads(scenarios)
+        persona_cfg = PersonaGenerationConfig.from_dict(config_data) if config_data else None
 
     # Determine API mode
     use_agentforce = agent_id is not None
@@ -83,16 +104,20 @@ def run_eval(
         casey_api_key=api_key,
         agentforce_agent_id=agent_id,
         use_agentforce=use_agentforce,
-        num_random_personas=conversations,
-        include_edge_cases=include_edge_cases,
+        num_personas=conversations,
+        persona_config=persona_cfg,
         judge_model=judge_model,
         synthetic_client_model=client_model,
     )
 
     api_mode = "Agentforce" if use_agentforce else "Legacy HTTP"
-    click.echo(f"Starting evaluation run with {conversations} random + edge case personas...")
+    click.echo(f"Starting evaluation run with {conversations} personas...")
     click.echo(f"API Mode: {api_mode}")
     click.echo(f"API URL: {api_url}")
+    if language:
+        click.echo(f"Language: {language}")
+    if legal_issue:
+        click.echo(f"Legal Issue: {legal_issue}")
     if agent_id:
         click.echo(f"Agent ID: {agent_id}")
 
@@ -146,39 +171,40 @@ def run_eval(
 
 
 @cli.command()
-@click.option("--persona", "-p", required=True, help="Persona name or ID")
+@click.option("--language", default=None, help="Pin persona language (e.g., Spanish)")
+@click.option("--legal-issue", default=None, help="Pin persona legal issue (e.g., Housing)")
 @click.option("--api-url", envvar="CASEY_API_URL", required=True, help="Salesforce My Domain URL or legacy API URL")
 @click.option("--api-key", envvar="CASEY_API_KEY", default=None, help="Access token (Agentforce) or API key (legacy)")
 @click.option("--agent-id", envvar="AGENTFORCE_AGENT_ID", default=None, help="Agentforce 18-char agent ID")
 @click.option("--preview", is_flag=True, help="Preview persona without running")
 @click.option("--output", "-o", default=None, help="Output file for results")
 def run_single(
-    persona: str,
+    language: str,
+    legal_issue: str,
     api_url: str,
     api_key: str,
     agent_id: str,
     preview: bool,
     output: str,
 ):
-    """Run evaluation for a single persona."""
-    from eval.personas.edge_cases import get_persona_by_name, ALL_EDGE_CASE_PERSONAS
+    """Run evaluation for a single dynamically generated persona."""
+    from eval.personas.config import PersonaGenerationConfig
+    from eval.personas.generator import PersonaGenerator
 
-    # Find persona
-    found_persona = get_persona_by_name(persona)
+    # Build config from flags
+    config_data = {}
+    if language:
+        config_data["language"] = language
+    if legal_issue:
+        config_data["legal_issue"] = legal_issue
+    persona_cfg = PersonaGenerationConfig.from_dict(config_data) if config_data else PersonaGenerationConfig.default()
 
-    if not found_persona:
-        # Try matching by partial name
-        for p in ALL_EDGE_CASE_PERSONAS:
-            if persona.lower() in p.name.lower():
-                found_persona = p
-                break
-
-    if not found_persona:
-        click.echo(f"Error: Persona '{persona}' not found")
-        click.echo("\nAvailable personas:")
-        for p in ALL_EDGE_CASE_PERSONAS:
-            click.echo(f"  - {p.name}")
-        return
+    # Generate a persona
+    llm_client = None
+    if HAS_OPENAI and os.environ.get("OPENAI_API_KEY"):
+        llm_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    generator = PersonaGenerator(config=persona_cfg, llm_client=llm_client)
+    found_persona = generator.generate_random_persona()
 
     click.echo(f"Persona: {found_persona.name}")
     click.echo(f"Language: {found_persona.primary_language.value}")
@@ -213,8 +239,7 @@ def run_single(
         casey_api_key=api_key,
         agentforce_agent_id=agent_id,
         use_agentforce=use_agentforce,
-        num_random_personas=0,
-        include_edge_cases=False,
+        num_personas=0,
     )
 
     api_mode = "Agentforce" if use_agentforce else "Legacy HTTP"
@@ -254,24 +279,23 @@ def run_single(
 
 
 @cli.command()
-@click.option("--category", "-c", default=None, help="Filter by category (safety, behavioral, language)")
-def list_personas(category: str):
-    """List available edge case personas."""
-    from eval.personas.edge_cases import (
-        SAFETY_PERSONAS,
-        BEHAVIORAL_PERSONAS,
-        LANGUAGE_PERSONAS,
-        ALL_EDGE_CASE_PERSONAS,
-    )
+@click.option("--language", default=None, help="Pin language for generated personas")
+@click.option("--legal-issue", default=None, help="Pin legal issue for generated personas")
+@click.option("--count", "-n", default=10, help="Number of personas to generate")
+def list_personas(language: str, legal_issue: str, count: int):
+    """Generate and list personas from config."""
+    from eval.personas.config import PersonaGenerationConfig
+    from eval.personas.generator import PersonaGenerator
 
-    if category == "safety":
-        personas = SAFETY_PERSONAS
-    elif category == "behavioral":
-        personas = BEHAVIORAL_PERSONAS
-    elif category == "language":
-        personas = LANGUAGE_PERSONAS
-    else:
-        personas = ALL_EDGE_CASE_PERSONAS
+    config_data = {}
+    if language:
+        config_data["language"] = language
+    if legal_issue:
+        config_data["legal_issue"] = legal_issue
+    persona_cfg = PersonaGenerationConfig.from_dict(config_data) if config_data else PersonaGenerationConfig.default()
+
+    generator = PersonaGenerator(config=persona_cfg)
+    personas = generator.generate_batch(count)
 
     click.echo(f"{'Name':<25} {'Language':<12} {'Issue':<15} {'Special'}")
     click.echo("-" * 70)

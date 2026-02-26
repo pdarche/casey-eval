@@ -23,9 +23,9 @@ from eval.personas.models import (
 # =============================================================================
 
 LANGUAGE_DISTRIBUTION = {
-    Language.ENGLISH: 0.70,      # 70% - Primary language
+    Language.ENGLISH: 0.65,      # 65% - Primary language
     Language.SPANISH: 0.20,      # 20% - Second largest group
-    Language.CHINESE: 0.05,      # 5%  - Significant SF population
+    Language.CHINESE: 0.10,      # 10% - Cantonese, significant SF population
     Language.FRENCH: 0.02,       # 2%  - Other languages combined
     Language.THAI: 0.01,         # 1%
     Language.KOREAN: 0.01,       # 1%

@@ -21,25 +21,26 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def get_persona(persona_name: str = None):
-    """Get a persona by name or return a default."""
-    from eval.personas.edge_cases import ALL_EDGE_CASE_PERSONAS, get_persona_by_name
+def get_persona(language: str = None, legal_issue: str = None):
+    """Generate a persona dynamically."""
+    from eval.personas.config import PersonaGenerationConfig
+    from eval.personas.generator import PersonaGenerator
 
-    if persona_name:
-        persona = get_persona_by_name(persona_name)
-        if not persona:
-            # Try partial match
-            for p in ALL_EDGE_CASE_PERSONAS:
-                if persona_name.lower() in p.name.lower():
-                    return p
-            print(f"Persona '{persona_name}' not found. Available:")
-            for p in ALL_EDGE_CASE_PERSONAS:
-                print(f"  - {p.name}")
-            sys.exit(1)
-        return persona
+    config_data = {}
+    if language:
+        config_data["language"] = language
+    if legal_issue:
+        config_data["legal_issue"] = legal_issue
+    persona_cfg = PersonaGenerationConfig.from_dict(config_data) if config_data else PersonaGenerationConfig.default()
 
-    # Default: Maria Santos (DV disclosure case)
-    return get_persona_by_name("Maria Santos") or ALL_EDGE_CASE_PERSONAS[0]
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    llm_client = None
+    if openai_key:
+        from openai import OpenAI
+        llm_client = OpenAI(api_key=openai_key)
+
+    generator = PersonaGenerator(config=persona_cfg, llm_client=llm_client)
+    return generator.generate_random_persona()
 
 
 def run_conversation(persona, max_turns: int = 50, verbose: bool = True, output_dir: str = None):
@@ -210,29 +211,16 @@ def run_conversation(persona, max_turns: int = 50, verbose: bool = True, output_
 
 def main():
     parser = argparse.ArgumentParser(description="Run a simulated conversation with Casey")
-    parser.add_argument("--persona", "-p", help="Persona name to use")
+    parser.add_argument("--language", default=None, help="Pin persona language (e.g., Spanish)")
+    parser.add_argument("--legal-issue", default=None, help="Pin persona legal issue (e.g., Housing)")
     parser.add_argument("--max-turns", "-m", type=int, default=50, help="Maximum turns")
     parser.add_argument("--output", "-o", default="transcripts", help="Output directory for transcripts")
     parser.add_argument("--no-save", action="store_true", help="Don't save transcript to file")
-    parser.add_argument("--list", "-l", action="store_true", help="List available personas")
     parser.add_argument("--quiet", "-q", action="store_true", help="Less verbose output")
 
     args = parser.parse_args()
 
-    if args.list:
-        from eval.personas.edge_cases import ALL_EDGE_CASE_PERSONAS
-        print("Available personas:")
-        for p in ALL_EDGE_CASE_PERSONAS:
-            flags = []
-            if p.discloses_dv:
-                flags.append("DV")
-            if p.discloses_crisis:
-                flags.append("Crisis")
-            flag_str = f" [{', '.join(flags)}]" if flags else ""
-            print(f"  - {p.name} ({p.primary_language.value}){flag_str}")
-        return
-
-    persona = get_persona(args.persona)
+    persona = get_persona(language=args.language, legal_issue=args.legal_issue)
     output_dir = None if args.no_save else args.output
     run_conversation(persona, max_turns=args.max_turns, verbose=not args.quiet, output_dir=output_dir)
 

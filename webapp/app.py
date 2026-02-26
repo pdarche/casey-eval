@@ -338,12 +338,12 @@ def create_run():
     try:
         # Create the simulation run
         config = {
-            "persona_set": data.get("persona_set", "all"),
             "count": data.get("count", 10),
+            "persona_config": data.get("persona_config", {}),
             "max_turns": data.get("max_turns", 50),
             "parallel": data.get("parallel", 5),
             "client_model": data.get("client_model", "gpt-4.1-mini"),
-            "judge_model": data.get("judge_model", "gpt-4.1"),
+            "judge_model": data.get("judge_model", "gpt-5-mini"),
             "auto_judge": data.get("auto_judge", True),
         }
 
@@ -371,11 +371,14 @@ def create_run():
 
 def run_evaluation_background(run_id: int, version: str, config: dict):
     """Run evaluation in background thread."""
+    import sys
+    print(f"[eval] Starting run {run_id}", file=sys.stderr, flush=True)
     from eval.database import (
         update_simulation_run_status, create_conversation,
         create_judgment, init_pool
     )
-    from eval.personas.edge_cases import get_personas_by_tag, ALL_EDGE_CASE_PERSONAS
+    from openai import OpenAI
+    from eval.personas.config import PersonaGenerationConfig
     from eval.personas.generator import PersonaGenerator
     from webapp.run_tracker import register_run, cleanup_run, is_cancelled, clear_cancelled
 
@@ -384,20 +387,14 @@ def run_evaluation_background(run_id: int, version: str, config: dict):
 
     try:
         # Get personas
-        persona_set = config.get("persona_set", "all")
         count = config.get("count", 10)
 
-        if persona_set == "random":
-            generator = PersonaGenerator()
-            personas = generator.generate_batch(count)
-        else:
-            base_personas = get_personas_by_tag(persona_set)
-            if not base_personas:
-                base_personas = ALL_EDGE_CASE_PERSONAS
-            # Cycle through personas to reach count
-            personas = []
-            for i in range(count):
-                personas.append(base_personas[i % len(base_personas)])
+        persona_cfg = PersonaGenerationConfig.from_dict(config.get("persona_config", {}))
+        openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        generator = PersonaGenerator(config=persona_cfg, llm_client=openai_client)
+        print(f"[eval] Generating {count} personas...", file=sys.stderr, flush=True)
+        personas = generator.generate_batch(count)
+        print(f"[eval] Generated {len(personas)} personas, starting conversations", file=sys.stderr, flush=True)
 
         # Register run for in-memory tracking
         register_run(run_id, personas)
@@ -457,8 +454,13 @@ def run_evaluation_background(run_id: int, version: str, config: dict):
         cleanup_run(run_id)
 
     except Exception as e:
-        print(f"Evaluation error: {e}")
-        update_simulation_run_status(run_id, "failed", {"error": str(e)})
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        print(f"[eval] Run {run_id} failed: {e}", file=sys.stderr, flush=True)
+        try:
+            update_simulation_run_status(run_id, "failed", {"error": str(e)})
+        except Exception as e2:
+            print(f"[eval] Failed to update status: {e2}", file=sys.stderr, flush=True)
         # Clean up in-memory tracking on failure too
         cleanup_run(run_id)
 
@@ -543,8 +545,11 @@ def run_single_conversation_to_db(persona, max_turns: int, simulation_run_id: in
             agent.add_message_text(client_response)
             try:
                 response = agent.send_message(session_id=session_id)
-            except KeyError:
+            except KeyError as e:
+                import sys
+                print(f"[eval] SDK KeyError on turn {turn_count}: {e}", file=sys.stderr, flush=True)
                 completion_reason = "sdk_error"
+                error = f"SDK KeyError: {e}"
                 break
 
             if response.messages:
@@ -612,7 +617,7 @@ def run_single_conversation_to_db(persona, max_turns: int, simulation_run_id: in
     }
 
 
-def run_judges_on_simulation(simulation_run_id: int, judge_model: str = "gpt-4.1"):
+def run_judges_on_simulation(simulation_run_id: int, judge_model: str = "gpt-5-mini"):
     """Run judges on all conversations in a simulation."""
     from eval.database import (
         list_conversations_by_simulation, create_judgment, get_cursor, get_simulation_run
@@ -922,7 +927,7 @@ def run_judges_on_run(run_id: int):
     update_simulation_run_status(run_id, "judging", run.summary)
 
     import threading
-    judge_model = run.config.get("judge_model", "gpt-4.1") if run.config else "gpt-4.1"
+    judge_model = run.config.get("judge_model", "gpt-5-mini") if run.config else "gpt-5-mini"
 
     def run_judges_background():
         from eval.database import init_pool, update_simulation_run_status
@@ -1392,10 +1397,9 @@ Be concise. Use bullet points. Reference specific personas when noting issues.
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4.1",
+            model="gpt-5",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=1000,
-            temperature=0.3,
+            max_completion_tokens=1000,
         )
         summary = response.choices[0].message.content
 
@@ -1505,9 +1509,9 @@ def run_judges_api():
         )
 
         # Run judges
-        safety_eval = SafetyEvaluator(llm_client=llm_client, model="gpt-4.1")
-        quality_eval = QualityEvaluator(llm_client=llm_client, model="gpt-4.1")
-        completeness_eval = CompletenessEvaluator(llm_client=llm_client, model="gpt-4.1")
+        safety_eval = SafetyEvaluator(llm_client=llm_client, model="gpt-5-mini")
+        quality_eval = QualityEvaluator(llm_client=llm_client, model="gpt-5-mini")
+        completeness_eval = CompletenessEvaluator(llm_client=llm_client, model="gpt-5-mini")
 
         safety_results = safety_eval.evaluate_all(context)
         quality_results = quality_eval.evaluate_all(context)

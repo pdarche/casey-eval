@@ -238,16 +238,96 @@
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Persona Set</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Persona Preset</label>
                     <select
-                        id="run-persona-set"
+                        id="run-persona-preset"
+                        onchange="toggleCustomPersonaConfig()"
                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="all">All Edge Cases (11 personas)</option>
-                        <option value="safety">Safety Personas (4 personas)</option>
-                        <option value="behavioral">Behavioral Personas (4 personas)</option>
-                        <option value="language">Language Personas (3 personas)</option>
-                        <option value="random">Random Generated</option>
+                        <option value="default">ODL Population (Default)</option>
+                        <option value="all_spanish">All Spanish</option>
+                        <option value="all_cantonese">All Cantonese</option>
+                        <option value="safety_focus">Safety Focus (Guaranteed Scenarios)</option>
+                        <option value="language_coverage">Language Coverage</option>
+                        <option value="custom">Custom</option>
                     </select>
+                </div>
+
+                <div id="custom-persona-config" class="hidden space-y-3 p-3 bg-gray-50 rounded-md">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">Language</label>
+                            <select id="run-language"
+                                class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="">Default Distribution</option>
+                                <option value="English">English</option>
+                                <option value="Español">Spanish</option>
+                                <option value="中文">Cantonese/Chinese</option>
+                                <option value="Français">French</option>
+                                <option value="ภาษาไทย">Thai</option>
+                                <option value="한국어">Korean</option>
+                                <option value="日本語">Japanese</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">Legal Issue</label>
+                            <select id="run-legal-issue"
+                                class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="">Default Distribution</option>
+                                <option value="Housing">Housing</option>
+                                <option value="UD Housing">UD Housing</option>
+                                <option value="Family">Family</option>
+                                <option value="Employment">Employment</option>
+                                <option value="Immigration">Immigration</option>
+                                <option value="Consumer">Consumer</option>
+                                <option value="Elder / Estate">Elder/Estate</option>
+                                <option value="Civil Litigation">Civil Litigation</option>
+                                <option value="Brief Services">Brief Services</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Guaranteed Scenarios</label>
+                    <p class="text-xs text-gray-500 mb-2">Specify exact count of personas with each scenario</p>
+                    <div class="space-y-2">
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" id="scenario-dv" class="h-4 w-4 text-blue-600 border-gray-300 rounded">
+                            <label for="scenario-dv" class="text-sm text-gray-700 flex-1">DV disclosure</label>
+                            <input type="number" id="scenario-dv-count" min="0" max="20" value="0" disabled
+                                class="w-16 px-2 py-1 text-sm border border-gray-300 rounded-md">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" id="scenario-crisis" class="h-4 w-4 text-blue-600 border-gray-300 rounded">
+                            <label for="scenario-crisis" class="text-sm text-gray-700 flex-1">Crisis/distress</label>
+                            <input type="number" id="scenario-crisis-count" min="0" max="20" value="0" disabled
+                                class="w-16 px-2 py-1 text-sm border border-gray-300 rounded-md">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" id="scenario-impossible" class="h-4 w-4 text-blue-600 border-gray-300 rounded">
+                            <label for="scenario-impossible" class="text-sm text-gray-700 flex-1">Impossible answers</label>
+                            <input type="number" id="scenario-impossible-count" min="0" max="20" value="0" disabled
+                                class="w-16 px-2 py-1 text-sm border border-gray-300 rounded-md">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" id="scenario-multi" class="h-4 w-4 text-blue-600 border-gray-300 rounded">
+                            <label for="scenario-multi" class="text-sm text-gray-700 flex-1">Multiple issues</label>
+                            <input type="number" id="scenario-multi-count" min="0" max="20" value="0" disabled
+                                class="w-16 px-2 py-1 text-sm border border-gray-300 rounded-md">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" id="scenario-oos" class="h-4 w-4 text-blue-600 border-gray-300 rounded">
+                            <label for="scenario-oos" class="text-sm text-gray-700 flex-1">Out-of-scope request</label>
+                            <input type="number" id="scenario-oos-count" min="0" max="20" value="0" disabled
+                                class="w-16 px-2 py-1 text-sm border border-gray-300 rounded-md">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" id="scenario-returning" class="h-4 w-4 text-blue-600 border-gray-300 rounded">
+                            <label for="scenario-returning" class="text-sm text-gray-700 flex-1">Returning client</label>
+                            <input type="number" id="scenario-returning-count" min="0" max="20" value="0" disabled
+                                class="w-16 px-2 py-1 text-sm border border-gray-300 rounded-md">
+                        </div>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-4">
@@ -292,7 +372,7 @@
                         <select
                             id="run-client-model"
                             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="gpt-4.1-mini">GPT-4.1 Mini (Faster)</option>
+                            <option value="gpt-4.1-mini">GPT-4.1 Mini (Default)</option>
                             <option value="gpt-4.1">GPT-4.1</option>
                             <option value="gpt-4o">GPT-4o</option>
                             <option value="gpt-4o-mini">GPT-4o Mini</option>
@@ -306,8 +386,9 @@
                     <select
                         id="run-judge-model"
                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="gpt-4.1">GPT-4.1 (Recommended)</option>
-                        <option value="gpt-4.1-mini">GPT-4.1 Mini (Faster/Cheaper)</option>
+                        <option value="gpt-5-mini">GPT-5 Mini (Default)</option>
+                        <option value="gpt-4.1">GPT-4.1</option>
+                        <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
                     </select>
                     <p class="mt-1 text-xs text-gray-500">Model for evaluating conversations</p>
                 </div>
@@ -695,6 +776,83 @@ function startPolling() {
     pollingInterval = setInterval(pollRunStatus, interval);
 }
 
+// Persona config UI helpers
+function toggleCustomPersonaConfig() {
+    const preset = document.getElementById('run-persona-preset').value;
+    const customSection = document.getElementById('custom-persona-config');
+    customSection.classList.toggle('hidden', preset !== 'custom');
+}
+
+// Toggle scenario count inputs when checkboxes change
+['dv', 'crisis', 'impossible', 'multi', 'oos', 'returning'].forEach(function(key) {
+    const checkbox = document.getElementById('scenario-' + key);
+    const countInput = document.getElementById('scenario-' + key + '-count');
+    if (checkbox && countInput) {
+        checkbox.addEventListener('change', function() {
+            countInput.disabled = !this.checked;
+            if (this.checked && parseInt(countInput.value) === 0) {
+                countInput.value = '2';
+            }
+        });
+    }
+});
+
+function buildPersonaConfig() {
+    const preset = document.getElementById('run-persona-preset').value;
+    const config = {};
+
+    // Apply preset overrides
+    if (preset === 'all_spanish') {
+        config.language = 'Español';
+    } else if (preset === 'all_cantonese') {
+        config.language = '中文';
+    } else if (preset === 'safety_focus') {
+        config.scenarios = {
+            discloses_dv: 3,
+            discloses_crisis: 2,
+            gives_impossible_answers: 2,
+            mentions_multiple_issues: 2,
+            attempts_out_of_scope: 2,
+            is_returning_client: 2
+        };
+        return config;
+    } else if (preset === 'language_coverage') {
+        config.language = {
+            'English': 0.30, 'Español': 0.20, '中文': 0.15,
+            'Français': 0.12, 'ภาษาไทย': 0.08, '한국어': 0.08, '日本語': 0.07
+        };
+        return config;
+    } else if (preset === 'custom') {
+        const lang = document.getElementById('run-language').value;
+        if (lang) config.language = lang;
+        const issue = document.getElementById('run-legal-issue').value;
+        if (issue) config.legal_issue = issue;
+    }
+
+    // Build scenarios from checkboxes (always, not just custom)
+    const scenarioMap = {
+        'dv': 'discloses_dv',
+        'crisis': 'discloses_crisis',
+        'impossible': 'gives_impossible_answers',
+        'multi': 'mentions_multiple_issues',
+        'oos': 'attempts_out_of_scope',
+        'returning': 'is_returning_client'
+    };
+    const scenarios = {};
+    Object.entries(scenarioMap).forEach(function([uiKey, configKey]) {
+        const checkbox = document.getElementById('scenario-' + uiKey);
+        const countInput = document.getElementById('scenario-' + uiKey + '-count');
+        if (checkbox && checkbox.checked) {
+            scenarios[configKey] = parseInt(countInput.value) || 2;
+        }
+    });
+    if (Object.keys(scenarios).length > 0) {
+        config.scenarios = scenarios;
+    }
+
+    return config;
+}
+
 // Handle form submission
 document.getElementById('create-form').addEventListener('submit', async function(e) {
     e.preventDefault();
@@ -702,7 +860,7 @@ document.getElementById('create-form').addEventListener('submit', async function
     const data = {
         version: document.getElementById('run-version').value,
         prompt_version_id: document.getElementById('run-prompt-version').value || null,
-        persona_set: document.getElementById('run-persona-set').value,
+        persona_config: buildPersonaConfig(),
         count: parseInt(document.getElementById('run-count').value),
         max_turns: parseInt(document.getElementById('run-max-turns').value),
         parallel: parseInt(document.getElementById('run-parallel').value),

@@ -98,15 +98,18 @@ class SyntheticClient:
         )
 
         # Call LLM
-        response = self.llm_client.chat.completions.create(
+        kwargs = dict(
             model=self.model,
             messages=[
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=self.temperature,
-            max_tokens=500,
+            max_completion_tokens=500,
         )
+        # GPT-5 family only supports temperature=1
+        if not self.model.startswith("gpt-5"):
+            kwargs["temperature"] = self.temperature
+        response = self.llm_client.chat.completions.create(**kwargs)
 
         client_response = response.choices[0].message.content.strip()
 

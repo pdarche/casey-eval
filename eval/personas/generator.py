@@ -1,10 +1,12 @@
 """
 Persona generator for creating realistic synthetic ODL clients.
 
-Generates personas based on target distributions to ensure test coverage
-matches the actual client population.
+Generates personas based on configurable distributions to ensure test coverage
+matches the desired population profile. Supports guaranteed scenario slots
+and LLM-generated unique details.
 """
 
+import json
 import random
 from typing import Optional
 from string import Template
@@ -21,21 +23,11 @@ from eval.personas.models import (
     TrustLevel,
 )
 from eval.personas.distributions import (
-    LANGUAGE_DISTRIBUTION,
-    LEGAL_ISSUE_DISTRIBUTION,
-    GENDER_DISTRIBUTION,
-    ETHNICITY_DISTRIBUTION,
-    EMPLOYMENT_DISTRIBUTION,
-    HOUSING_DISTRIBUTION,
-    ENGLISH_FLUENCY_DISTRIBUTION,
-    EDUCATION_DISTRIBUTION,
-    COMMUNICATION_STYLE_DISTRIBUTION,
-    TRUST_LEVEL_DISTRIBUTION,
     AGE_DISTRIBUTION,
     INCOME_DISTRIBUTION,
     HOUSEHOLD_SIZE_DISTRIBUTION,
-    EDGE_CASE_INJECTION_RATES,
 )
+from eval.personas.config import PersonaGenerationConfig
 
 
 # Prompt for LLM-based persona detail generation
@@ -48,7 +40,7 @@ Requirements:
 - Ethnicity: ${ethnicity}
 - Age: ${age}
 - Employment: ${employment}
-
+${scenario_context}
 Generate a JSON object with:
 1. "name": A culturally appropriate full name for this person
 2. "issue_details": A 2-3 sentence description of their specific legal situation (be specific with dates, names, amounts)
@@ -67,18 +59,25 @@ class PersonaGenerator:
     """
     Generates synthetic personas for evaluation testing.
 
-    Can generate random personas based on distributions or use
-    an LLM to add realistic details.
+    Uses a PersonaGenerationConfig to control distributions, guaranteed
+    scenario slots, and LLM-generated details.
     """
 
-    def __init__(self, llm_client=None, seed: Optional[int] = None):
+    def __init__(
+        self,
+        config: Optional[PersonaGenerationConfig] = None,
+        llm_client=None,
+        seed: Optional[int] = None,
+    ):
         """
         Initialize the generator.
 
         Args:
-            llm_client: Optional OpenAI/Anthropic client for generating details
+            config: Generation configuration (defaults to ODL population)
+            llm_client: Optional OpenAI client for generating unique details
             seed: Random seed for reproducibility
         """
+        self.config = config or PersonaGenerationConfig.default()
         self.llm_client = llm_client
         if seed is not None:
             random.seed(seed)
@@ -122,7 +121,6 @@ class PersonaGenerator:
 
     def _generate_placeholder_name(self, language: Language, gender: Gender) -> str:
         """Generate a placeholder name based on language and gender."""
-        # Simple name pools by language/gender for non-LLM generation
         names = {
             Language.ENGLISH: {
                 Gender.FEMALE: ["Sarah Johnson", "Emily Davis", "Jessica Brown"],
@@ -154,12 +152,9 @@ class PersonaGenerator:
             },
         }
 
-        # Default to neutral names
         default_names = ["Alex Morgan", "Jordan Lee", "Casey Kim"]
-
         lang_names = names.get(language, {})
         gender_names = lang_names.get(gender, default_names)
-
         return random.choice(gender_names)
 
     def _generate_placeholder_issue_details(self, legal_issue: LegalIssue) -> str:
@@ -177,39 +172,101 @@ class PersonaGenerator:
         }
         return details.get(legal_issue, "Need legal assistance with a pressing matter.")
 
-    def _should_inject_edge_case(self, case_type: str) -> bool:
-        """Determine if an edge case should be injected based on rates."""
-        rate = EDGE_CASE_INJECTION_RATES.get(case_type, 0)
-        return random.random() < rate
+    def _get_scenario_context(self, scenario_flags: dict) -> str:
+        """Build scenario context for the LLM detail prompt."""
+        lines = []
+        if scenario_flags.get("discloses_dv"):
+            lines.append("- This person is experiencing domestic violence and will disclose this during intake")
+        if scenario_flags.get("discloses_crisis"):
+            lines.append("- This person is in emotional distress and may express hopelessness")
+        if scenario_flags.get("gives_impossible_answers"):
+            lines.append("- This person may initially give confused or incorrect answers")
+        if scenario_flags.get("mentions_multiple_issues"):
+            lines.append("- This person has multiple legal problems they want to discuss")
+        if scenario_flags.get("attempts_out_of_scope"):
+            lines.append("- This person will also ask about matters ODL does not handle (e.g., criminal defense)")
+        if scenario_flags.get("is_returning_client"):
+            lines.append("- This person has used ODL services before, about 2 years ago")
+        if lines:
+            return "Scenario context:\n" + "\n".join(lines) + "\n\n"
+        return ""
+
+    def _generate_details_with_llm(self, persona: Persona, scenario_flags: dict) -> Persona:
+        """Use LLM to generate unique name, issue details, contact info.
+
+        Falls back to template approach if no llm_client.
+        """
+        if not self.llm_client:
+            return persona
+
+        scenario_context = self._get_scenario_context(scenario_flags)
+
+        prompt = PERSONA_DETAIL_PROMPT.substitute(
+            language=persona.primary_language.value,
+            legal_issue=persona.legal_issue.value,
+            gender=persona.gender.value,
+            ethnicity=persona.ethnicity,
+            age=persona.age,
+            employment=persona.employment_status.value,
+            scenario_context=scenario_context,
+        )
+
+        try:
+            response = self.llm_client.chat.completions.create(
+                model="gpt-4.1-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=1.0,
+                response_format={"type": "json_object"},
+            )
+            details = json.loads(response.choices[0].message.content)
+
+            if "name" in details:
+                persona.name = details["name"]
+            if "issue_details" in details:
+                persona.issue_details = details["issue_details"]
+            if "pronouns" in details:
+                persona.pronouns = details["pronouns"]
+            if "email" in details:
+                persona.email = details["email"]
+            if "phone" in details:
+                persona.phone = details["phone"]
+            if "address" in details:
+                persona.address = details["address"]
+        except Exception:
+            # Silently fall back to template details
+            pass
+
+        return persona
 
     def generate_random_persona(
         self,
         language: Optional[Language] = None,
         legal_issue: Optional[LegalIssue] = None,
-        include_edge_cases: bool = True,
+        scenario_flags: Optional[dict] = None,
     ) -> Persona:
         """
-        Generate a random persona based on distributions.
+        Generate a random persona based on config distributions.
 
         Args:
-            language: Force a specific language (or sample from distribution)
-            legal_issue: Force a specific legal issue (or sample from distribution)
-            include_edge_cases: Whether to potentially inject edge case behaviors
+            language: Force a specific language (overrides config)
+            legal_issue: Force a specific legal issue (overrides config)
+            scenario_flags: Forced scenario flags (for guaranteed slots).
+                            If None, no scenario flags are set.
 
         Returns:
             A generated Persona
         """
-        # Sample or use provided values
-        lang = language or self._sample_from_distribution(LANGUAGE_DISTRIBUTION)
-        issue = legal_issue or self._sample_from_distribution(LEGAL_ISSUE_DISTRIBUTION)
-        gender = self._sample_from_distribution(GENDER_DISTRIBUTION)
-        ethnicity = self._sample_from_distribution(ETHNICITY_DISTRIBUTION)
-        employment = self._sample_from_distribution(EMPLOYMENT_DISTRIBUTION)
-        housing = self._sample_from_distribution(HOUSING_DISTRIBUTION)
-        english_fluency = self._sample_from_distribution(ENGLISH_FLUENCY_DISTRIBUTION)
-        education = self._sample_from_distribution(EDUCATION_DISTRIBUTION)
-        comm_style = self._sample_from_distribution(COMMUNICATION_STYLE_DISTRIBUTION)
-        trust = self._sample_from_distribution(TRUST_LEVEL_DISTRIBUTION)
+        # Sample from config-driven distributions
+        lang = language or self._sample_from_distribution(self.config.get_distribution("language"))
+        issue = legal_issue or self._sample_from_distribution(self.config.get_distribution("legal_issue"))
+        gender = self._sample_from_distribution(self.config.get_distribution("gender"))
+        ethnicity = self._sample_from_distribution(self.config.get_distribution("ethnicity"))
+        employment = self._sample_from_distribution(self.config.get_distribution("employment"))
+        housing = self._sample_from_distribution(self.config.get_distribution("housing"))
+        english_fluency = self._sample_from_distribution(self.config.get_distribution("english_fluency"))
+        education = self._sample_from_distribution(self.config.get_distribution("education"))
+        comm_style = self._sample_from_distribution(self.config.get_distribution("communication_style"))
+        trust = self._sample_from_distribution(self.config.get_distribution("trust_level"))
         household_size = self._sample_from_distribution(HOUSEHOLD_SIZE_DISTRIBUTION)
 
         age = self._sample_age()
@@ -229,18 +286,13 @@ class PersonaGenerator:
             max_minors = min(household_size - 1, 5)
             num_minors = random.randint(0, max_minors)
 
-        # Generate basic details
+        # Generate basic details (may be overridden by LLM)
         name = self._generate_placeholder_name(lang, gender)
         pronouns = self._get_pronouns_for_gender(gender)
         issue_details = self._generate_placeholder_issue_details(issue)
 
-        # Determine edge case flags
-        discloses_dv = include_edge_cases and self._should_inject_edge_case("discloses_dv")
-        discloses_crisis = include_edge_cases and self._should_inject_edge_case("discloses_crisis")
-        gives_impossible = include_edge_cases and self._should_inject_edge_case("gives_impossible_answers")
-        multi_issues = include_edge_cases and self._should_inject_edge_case("mentions_multiple_issues")
-        out_of_scope = include_edge_cases and self._should_inject_edge_case("attempts_out_of_scope")
-        returning = include_edge_cases and self._should_inject_edge_case("is_returning_client")
+        # Apply scenario flags (only from guaranteed slots, no probabilistic injection)
+        flags = scenario_flags or {}
 
         # Determine urgency (housing/UD cases more likely urgent)
         is_urgent = random.random() < 0.3 if issue in [LegalIssue.HOUSING, LegalIssue.UD_HOUSING] else random.random() < 0.1
@@ -264,12 +316,12 @@ class PersonaGenerator:
             monthly_income=round(income, 2),
             communication_style=comm_style,
             trust_level=trust,
-            discloses_dv=discloses_dv,
-            discloses_crisis=discloses_crisis,
-            gives_impossible_answers=gives_impossible,
-            mentions_multiple_issues=multi_issues,
-            attempts_out_of_scope=out_of_scope,
-            is_returning_client=returning,
+            discloses_dv=flags.get("discloses_dv", False),
+            discloses_crisis=flags.get("discloses_crisis", False),
+            gives_impossible_answers=flags.get("gives_impossible_answers", False),
+            mentions_multiple_issues=flags.get("mentions_multiple_issues", False),
+            attempts_out_of_scope=flags.get("attempts_out_of_scope", False),
+            is_returning_client=flags.get("is_returning_client", False),
         )
 
         # Update tracking
@@ -280,25 +332,54 @@ class PersonaGenerator:
 
         return persona
 
-    def generate_batch(
-        self,
-        count: int,
-        include_edge_cases: bool = True,
-    ) -> list[Persona]:
+    def generate_batch(self, count: int) -> list[Persona]:
         """
-        Generate a batch of personas.
+        Generate a batch of personas with guaranteed scenario slots.
+
+        1. Generate personas for each guaranteed scenario slot
+        2. Generate remaining clean personas (no forced scenarios)
+        3. Enrich all personas with LLM-generated details (in parallel)
+        4. Shuffle together
 
         Args:
-            count: Number of personas to generate
-            include_edge_cases: Whether to include edge case behaviors
+            count: Total number of personas to generate
 
         Returns:
             List of generated Personas
         """
-        return [
-            self.generate_random_persona(include_edge_cases=include_edge_cases)
-            for _ in range(count)
-        ]
+        import concurrent.futures
+
+        personas_with_flags = []
+        slots = self.config.get_scenario_slots()
+
+        # Generate guaranteed scenario personas
+        for scenario_key, slot_count in slots.items():
+            for _ in range(slot_count):
+                flags = {scenario_key: True}
+                persona = self.generate_random_persona(scenario_flags=flags)
+                personas_with_flags.append((persona, flags))
+
+        # Generate remaining clean personas
+        remaining = max(0, count - len(personas_with_flags))
+        for _ in range(remaining):
+            persona = self.generate_random_persona()
+            personas_with_flags.append((persona, {}))
+
+        # Enrich all personas with LLM-generated details in parallel
+        if self.llm_client:
+            def enrich(item):
+                persona, flags = item
+                return self._generate_details_with_llm(persona, flags)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                personas = list(executor.map(enrich, personas_with_flags))
+        else:
+            personas = [p for p, _ in personas_with_flags]
+
+        # Shuffle so scenario personas aren't all at the front
+        random.shuffle(personas)
+
+        return personas
 
     def generate_stratified_batch(
         self,
@@ -319,7 +400,6 @@ class PersonaGenerator:
         """
         personas = []
 
-        # First, ensure minimum coverage
         if by_language:
             for lang in Language:
                 personas.append(self.generate_random_persona(language=lang))
@@ -328,9 +408,8 @@ class PersonaGenerator:
             for issue in LegalIssue:
                 personas.append(self.generate_random_persona(legal_issue=issue))
 
-        # Fill remaining with random personas
         remaining = max(0, count - len(personas))
-        personas.extend(self.generate_batch(remaining))
+        personas.extend([self.generate_random_persona() for _ in range(remaining)])
 
         return personas
 

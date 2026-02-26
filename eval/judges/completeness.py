@@ -129,8 +129,7 @@ class CompletenessJudge(BaseJudge):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.1,
-            max_tokens=4096,  # Higher limit for 13-step evaluation
+            max_completion_tokens=4096,  # Higher limit for 13-step evaluation
             response_format={"type": "json_object"},  # Force JSON output
         )
 

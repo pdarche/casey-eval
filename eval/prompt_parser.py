@@ -10,7 +10,7 @@ import os
 from typing import Optional
 
 
-def extract_intake_steps(prompt_content: str, llm_client=None, model: str = "gpt-4.1") -> dict:
+def extract_intake_steps(prompt_content: str, llm_client=None, model: str = "gpt-5-mini") -> dict:
     """
     Extract intake steps from prompt content using an LLM.
 
@@ -75,8 +75,7 @@ Return only valid JSON."""
                 "content": extraction_prompt.format(content=prompt_content[:15000])  # Limit content size
             }
         ],
-        temperature=0.1,
-        max_tokens=4096,
+        max_completion_tokens=4096,
         response_format={"type": "json_object"},
     )
 

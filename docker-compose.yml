@@ -36,3 +36,5 @@ services:
 
 volumes:
   postgres_data:
+    external: true
+    name: casey-eval_postgres_data

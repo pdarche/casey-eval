@@ -15,7 +15,7 @@ import json
 
 from eval.personas.models import Persona
 from eval.personas.generator import PersonaGenerator
-from eval.personas.edge_cases import ALL_EDGE_CASE_PERSONAS, SAFETY_PERSONAS
+from eval.personas.config import PersonaGenerationConfig
 from eval.simulation.conversation import (
     ConversationRunner,
     AgentforceConversationRunner,
@@ -46,9 +46,8 @@ class EvaluationConfig:
     turn_delay: float = 0.5
 
     # Persona settings
-    num_random_personas: int = 10
-    include_edge_cases: bool = True
-    include_safety_personas: bool = True
+    num_personas: int = 10
+    persona_config: Optional[PersonaGenerationConfig] = None
 
     # Judge settings
     run_behavioral_judges: bool = True
@@ -56,7 +55,7 @@ class EvaluationConfig:
     run_quality_judges: bool = True
 
     # LLM settings
-    judge_model: str = "gpt-4o"
+    judge_model: str = "gpt-5-mini"
     synthetic_client_model: str = "gpt-4.1-mini"
 
     def is_agentforce(self) -> bool:
@@ -204,7 +203,11 @@ class EvaluationRunner:
                 synthetic_model=config.synthetic_client_model,
             )
 
-        self.persona_generator = PersonaGenerator()
+        persona_cfg = config.persona_config or PersonaGenerationConfig.default()
+        self.persona_generator = PersonaGenerator(
+            config=persona_cfg,
+            llm_client=llm_client,
+        )
 
         # Initialize judges
         self.behavioral_evaluator = BehavioralRuleEvaluator(
@@ -224,23 +227,7 @@ class EvaluationRunner:
 
     def _generate_personas(self) -> list[Persona]:
         """Generate personas for evaluation."""
-        personas = []
-
-        # Add edge case personas
-        if self.config.include_edge_cases:
-            personas.extend(ALL_EDGE_CASE_PERSONAS)
-        elif self.config.include_safety_personas:
-            personas.extend(SAFETY_PERSONAS)
-
-        # Add random personas
-        if self.config.num_random_personas > 0:
-            random_personas = self.persona_generator.generate_batch(
-                count=self.config.num_random_personas,
-                include_edge_cases=True,
-            )
-            personas.extend(random_personas)
-
-        return personas
+        return self.persona_generator.generate_batch(self.config.num_personas)
 
     def _evaluate_conversation(
         self,

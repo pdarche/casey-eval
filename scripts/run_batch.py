@@ -180,8 +180,9 @@ def main():
     parser.add_argument("--parallel", "-p", type=int, default=10, help="Max parallel conversations")
     parser.add_argument("--max-turns", "-m", type=int, default=50, help="Max turns per conversation")
     parser.add_argument("--output", "-o", default="transcripts", help="Output directory")
-    parser.add_argument("--all-personas", action="store_true", help="Run all edge case personas")
-    parser.add_argument("--random", action="store_true", help="Generate random personas")
+    parser.add_argument("--language", default=None, help="Pin all personas to a language (e.g., Spanish)")
+    parser.add_argument("--legal-issue", default=None, help="Pin all personas to a legal issue (e.g., Housing)")
+    parser.add_argument("--scenarios", default=None, help='JSON string of scenario slots, e.g., \'{"discloses_dv": 3}\'')
     parser.add_argument("--version", "-v", default=None, help="Version tag for this eval run (e.g., 'v1.0-baseline')")
 
     args = parser.parse_args()
@@ -198,19 +199,22 @@ def main():
         sys.exit(1)
 
     # Get personas
-    from eval.personas.edge_cases import ALL_EDGE_CASE_PERSONAS
+    from openai import OpenAI
+    from eval.personas.config import PersonaGenerationConfig
     from eval.personas.generator import PersonaGenerator
 
-    if args.all_personas:
-        personas = ALL_EDGE_CASE_PERSONAS
-    elif args.random:
-        generator = PersonaGenerator()
-        personas = generator.generate_batch(args.count)
-    else:
-        # Cycle through edge case personas
-        personas = []
-        for i in range(args.count):
-            personas.append(ALL_EDGE_CASE_PERSONAS[i % len(ALL_EDGE_CASE_PERSONAS)])
+    config_data = {}
+    if args.language:
+        config_data["language"] = args.language
+    if args.legal_issue:
+        config_data["legal_issue"] = args.legal_issue
+    if args.scenarios:
+        config_data["scenarios"] = json.loads(args.scenarios)
+    persona_cfg = PersonaGenerationConfig.from_dict(config_data) if config_data else PersonaGenerationConfig.default()
+
+    openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    generator = PersonaGenerator(config=persona_cfg, llm_client=openai_client)
+    personas = generator.generate_batch(args.count)
 
     print("=" * 60)
     print(f"BATCH EVALUATION")
