@@ -8,6 +8,7 @@ Usage:
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify
@@ -27,6 +28,15 @@ from webapp.auth import init_auth
 
 app = Flask(__name__)
 init_auth(app)
+
+
+@app.template_filter('sort_steps')
+def sort_steps_filter(step_results):
+    """Sort step_results dict items by step number (1, 2, ... n)."""
+    def step_sort_key(item):
+        m = re.search(r'step_(\d+)', item[0])
+        return (int(m.group(1)) if m else 0, item[0])
+    return sorted(step_results.items(), key=step_sort_key)
 
 
 # =============================================================================

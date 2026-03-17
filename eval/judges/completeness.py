@@ -238,7 +238,10 @@ class CompletenessJudge(BaseJudge):
                     "steps_failed": steps_failed,
                     "steps_total": steps_total,
                     "completion_rate": round(completion_rate, 2),
-                    "step_results": step_results,
+                    "step_results": {
+                        step_id: step_results.get(step_id, {"status": "fail", "captured": None, "evidence": "", "reason": "Not found in evaluation"})
+                        for step_id in self.intake_steps
+                    },
                     "missing_fields": list(set(missing_fields)),
                 },
             )

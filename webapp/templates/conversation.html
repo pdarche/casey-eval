@@ -214,7 +214,7 @@
                     {% set step_results = meta.step_results or {} %}
                     {% if step_results %}
                     <div class="space-y-1">
-                        {% for step_id, step_data in step_results.items() %}
+                        {% for step_id, step_data in step_results|sort_steps %}
                         {% set status = step_data.status or 'fail' %}
                         {% set step_pass = status == 'pass' %}
                         {% set step_partial = status == 'partial' %}
@@ -424,9 +424,14 @@ async function runJudges() {
 
             // Step-by-Step Breakdown
             const stepResults = meta.step_results || {};
-            if (Object.keys(stepResults).length > 0) {
+            const sortedStepEntries = Object.entries(stepResults).sort((a, b) => {
+                const numA = parseInt((a[0].match(/step_(\d+)/) || [])[1]) || 0;
+                const numB = parseInt((b[0].match(/step_(\d+)/) || [])[1]) || 0;
+                return numA - numB || a[0].localeCompare(b[0]);
+            });
+            if (sortedStepEntries.length > 0) {
                 html += '<div class="space-y-1">';
-                for (const [stepId, stepData] of Object.entries(stepResults)) {
+                for (const [stepId, stepData] of sortedStepEntries) {
                     const status = stepData.status || 'fail';
                     const stepPass = status === 'pass';
                     const stepPartial = status === 'partial';
