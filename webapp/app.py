@@ -32,10 +32,21 @@ init_auth(app)
 
 @app.template_filter('sort_steps')
 def sort_steps_filter(step_results):
-    """Sort step_results dict items by step number (1, 2, ... n)."""
+    """Sort step_results dict items by step/question number.
+
+    Handles both new format (s{N}_q{M}_name) and old format (step_{N}_name).
+    """
     def step_sort_key(item):
-        m = re.search(r'step_(\d+)', item[0])
-        return (int(m.group(1)) if m else 0, item[0])
+        key = item[0]
+        # New format: s{N}_q{M}_...
+        m = re.match(r's(\d+)_q(\d+)', key)
+        if m:
+            return (int(m.group(1)), int(m.group(2)), key)
+        # Old format: step_{N}_...
+        m = re.search(r'step_(\d+)', key)
+        if m:
+            return (int(m.group(1)), 0, key)
+        return (0, 0, key)
     return sorted(step_results.items(), key=step_sort_key)
 
 

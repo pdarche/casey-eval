@@ -169,8 +169,8 @@ def list_versions_from_db() -> List[VersionSummary]:
                             intake_completeness = comp["score"] / 5.0
                         else:
                             intake_completeness = metadata.get("completion_rate")
-                        intake_steps_completed = metadata.get("steps_completed")
-                        intake_steps_total = metadata.get("steps_total")
+                        intake_steps_completed = metadata.get("questions_completed", metadata.get("steps_completed"))
+                        intake_steps_total = metadata.get("questions_total", metadata.get("steps_total"))
                         if intake_completeness is not None:
                             completeness_scores.append(intake_completeness)
 

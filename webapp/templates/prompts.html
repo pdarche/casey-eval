@@ -160,7 +160,21 @@
                 </div>
             </div>
 
-            <div class="mt-6 flex justify-end space-x-3">
+            <!-- Loading indicator (hidden by default) -->
+            <div id="create-loading" class="hidden mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                <div class="flex items-center gap-3">
+                    <svg class="animate-spin h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <div>
+                        <div class="text-sm font-medium text-blue-800">Creating prompt version...</div>
+                        <div class="text-xs text-blue-600">Extracting intake questions from prompt content. This may take a moment.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="create-buttons" class="mt-6 flex justify-end space-x-3">
                 <button
                     type="button"
                     onclick="document.getElementById('create-modal').classList.add('hidden')"
@@ -169,6 +183,7 @@
                 </button>
                 <button
                     type="submit"
+                    id="create-submit-btn"
                     class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium">
                     Create Version
                 </button>
@@ -194,6 +209,14 @@ document.getElementById('create-form').addEventListener('submit', async function
         return;
     }
 
+    // Show loading state
+    const submitBtn = document.getElementById('create-submit-btn');
+    const loading = document.getElementById('create-loading');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Creating...';
+    submitBtn.className = 'px-4 py-2 bg-gray-400 text-white rounded-md text-sm font-medium cursor-not-allowed';
+    loading.classList.remove('hidden');
+
     try {
         const response = await fetch('/api/prompts', {
             method: 'POST',
@@ -209,9 +232,19 @@ document.getElementById('create-form').addEventListener('submit', async function
         } else {
             const error = await response.json();
             alert('Error: ' + (error.error || 'Failed to create prompt'));
+            // Reset loading state
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Create Version';
+            submitBtn.className = 'px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium';
+            loading.classList.add('hidden');
         }
     } catch (err) {
         alert('Error: ' + err.message);
+        // Reset loading state
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create Version';
+        submitBtn.className = 'px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium';
+        loading.classList.add('hidden');
     }
 });
 

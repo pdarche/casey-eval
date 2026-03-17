@@ -106,11 +106,12 @@ def compute_eval_metrics(eval_data: dict) -> tuple[bool, float, float, int, int]
     avg_quality = sum(scores) / len(scores) if scores else None
 
     # Completeness: get completion rate from completeness judge
+    # Try new keys first, fall back to old keys
     completeness_data = eval_data.get("completeness", {})
     completeness_metadata = completeness_data.get("metadata", {}) if completeness_data else {}
     intake_completeness = completeness_metadata.get("completion_rate")
-    steps_completed = completeness_metadata.get("steps_completed")
-    steps_total = completeness_metadata.get("steps_total")
+    steps_completed = completeness_metadata.get("questions_completed", completeness_metadata.get("steps_completed"))
+    steps_total = completeness_metadata.get("questions_total", completeness_metadata.get("steps_total"))
 
     return safety_passed, avg_quality, intake_completeness, steps_completed, steps_total
 

@@ -83,12 +83,12 @@ def run_judges(context, llm_client, judge_model: str = "gpt-4o"):
     results["completeness"] = completeness_result
 
     metadata = completeness_result.metadata or {}
-    steps_completed = metadata.get("steps_completed", 0)
-    steps_total = metadata.get("steps_total", 13)
+    q_completed = metadata.get("questions_completed", metadata.get("steps_completed", 0))
+    q_total = metadata.get("questions_total", metadata.get("steps_total", 13))
     completion_rate = metadata.get("completion_rate", 0)
 
     icon = "✓" if completeness_result.verdict.value == "pass" else "✗" if completeness_result.verdict.value == "fail" else "~"
-    print(f"  {icon} {completeness_result.judge_id}: {steps_completed}/{steps_total} steps ({completion_rate:.0%})")
+    print(f"  {icon} {completeness_result.judge_id}: {q_completed}/{q_total} questions ({completion_rate:.0%})")
     if completeness_result.reasoning:
         print(f"      {completeness_result.reasoning[:100]}...")
 
@@ -129,34 +129,62 @@ def print_summary(results: dict):
     completeness_result = results.get("completeness")
     if completeness_result:
         metadata = completeness_result.metadata or {}
-        steps_completed = metadata.get("steps_completed", 0)
-        steps_partial = metadata.get("steps_partial", 0)
-        steps_total = metadata.get("steps_total", 13)
+        q_completed = metadata.get("questions_completed", metadata.get("steps_completed", 0))
+        q_partial = metadata.get("questions_partial", metadata.get("steps_partial", 0))
+        q_total = metadata.get("questions_total", metadata.get("steps_total", 13))
         completion_rate = metadata.get("completion_rate", 0)
         missing_fields = metadata.get("missing_fields", [])
 
-        print(f"\nCompleteness: {steps_completed}/{steps_total} complete, {steps_partial} partial ({completion_rate:.0%})")
+        print(f"\nCompleteness: {q_completed}/{q_total} complete, {q_partial} partial ({completion_rate:.0%})")
 
         if missing_fields:
             print(f"  Missing fields: {', '.join(missing_fields[:5])}")
             if len(missing_fields) > 5:
                 print(f"    ... and {len(missing_fields) - 5} more")
 
-        # Show step-by-step breakdown
+        # Show question-by-question breakdown
         step_results = metadata.get("step_results", {})
         if step_results:
-            print("\n  Step-by-step:")
-            for step_id, step_data in step_results.items():
+            print("\n  Question-by-question:")
+            import re as _re
+            # Sort entries
+            def _sort_key(item):
+                key = item[0]
+                m = _re.match(r's(\d+)_q(\d+)', key)
+                if m:
+                    return (int(m.group(1)), int(m.group(2)), key)
+                m = _re.search(r'step_(\d+)', key)
+                if m:
+                    return (int(m.group(1)), 0, key)
+                return (0, 0, key)
+
+            current_group = -1
+            for step_id, step_data in sorted(step_results.items(), key=lambda x: _sort_key(x)):
                 status = step_data.get("status", "unknown")
                 icon = "✓" if status == "pass" else "~" if status == "partial" else "✗"
-                step_name = step_id.replace("step_", "").replace("_", " ").title()
+
+                # Derive display name
+                sd = step_data.get("step_data", {})
+                if sd and sd.get("name"):
+                    # New format: show group header if changed
+                    parent = sd.get("parent_step", 0)
+                    if parent != current_group:
+                        current_group = parent
+                        parent_name = sd.get("parent_step_name", f"Step {parent}")
+                        print(f"    Step {parent} — {parent_name}")
+                    display_name = sd["name"]
+                    indent = "      "
+                else:
+                    # Old format
+                    display_name = step_id.replace("step_", "").replace("_", " ").title()
+                    indent = "    "
+
                 captured = step_data.get("captured", "")
                 if captured:
-                    # Handle captured being dict, list, or string
                     captured_str = str(captured) if not isinstance(captured, str) else captured
-                    print(f"    {icon} {step_name}: {captured_str[:50]}")
+                    print(f"{indent}{icon} {display_name}: {captured_str[:50]}")
                 else:
-                    print(f"    {icon} {step_name}")
+                    print(f"{indent}{icon} {display_name}")
 
 
 def main():

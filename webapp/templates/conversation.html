@@ -190,8 +190,8 @@
                     <h4 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Intake Completeness</h4>
                     {% set c = conversation._eval.completeness %}
                     {% set meta = c.metadata or {} %}
-                    {% set steps_completed = meta.steps_completed or 0 %}
-                    {% set steps_total = meta.steps_total or 13 %}
+                    {% set q_completed = meta.questions_completed or meta.steps_completed or 0 %}
+                    {% set q_total = meta.questions_total or meta.steps_total or 13 %}
                     {% set completion_rate = meta.completion_rate or 0 %}
                     {% set is_pass = c.verdict == 'pass' %}
                     {% set is_partial = c.verdict == 'partial' %}
@@ -203,34 +203,67 @@
                     <div class="{{ bg_color }} border {{ border_color }} rounded-lg p-3 mb-3">
                         <div class="flex items-center justify-between">
                             <div>
-                                <div class="font-medium text-gray-800">{{ steps_completed }}/{{ steps_total }} Steps Complete</div>
+                                <div class="font-medium text-gray-800">{{ q_completed }}/{{ q_total }} Questions Complete</div>
                                 <div class="text-xs text-gray-600 mt-1">{{ c.reasoning or '' }}</div>
                             </div>
                             <div class="{{ rate_color }} text-2xl font-bold">{{ "%.0f"|format(completion_rate * 100) }}%</div>
                         </div>
                     </div>
 
-                    <!-- Step-by-Step Breakdown -->
+                    <!-- Question-by-Question Breakdown -->
                     {% set step_results = meta.step_results or {} %}
                     {% if step_results %}
-                    <div class="space-y-1">
-                        {% for step_id, step_data in step_results|sort_steps %}
-                        {% set status = step_data.status or 'fail' %}
-                        {% set step_pass = status == 'pass' %}
-                        {% set step_partial = status == 'partial' %}
-                        {% set step_icon = '✓' if step_pass else ('~' if step_partial else '✗') %}
-                        {% set step_icon_color = 'text-green-600' if step_pass else ('text-yellow-600' if step_partial else 'text-red-400') %}
-                        {% set step_bg = 'bg-green-50' if step_pass else ('bg-yellow-50' if step_partial else 'bg-gray-50') %}
-                        {% set step_name = step_id.replace('step_', '').replace('_', ' ').title() %}
-                        <div class="{{ step_bg }} rounded px-2 py-1.5 text-xs flex items-center gap-2">
-                            <span class="{{ step_icon_color }} font-bold">{{ step_icon }}</span>
-                            <span class="text-gray-700 font-medium flex-1">{{ step_name }}</span>
-                            {% if step_data.captured %}
-                            {% set captured_str = step_data.captured|string %}
-                            <span class="text-gray-500 truncate max-w-[120px]" title="{{ captured_str }}">{{ captured_str[:30] }}{% if captured_str|length > 30 %}...{% endif %}</span>
-                            {% endif %}
-                        </div>
-                        {% endfor %}
+                    <div class="space-y-2">
+                        {# Check if new format (has parent_step in step_data) #}
+                        {% set first_val = step_results.values()|first %}
+                        {% set is_new_fmt = first_val and first_val.step_data is defined and first_val.step_data and first_val.step_data.parent_step is defined %}
+
+                        {% if is_new_fmt %}
+                            {# Group by parent step #}
+                            {% set ns = namespace(current_group=-1) %}
+                            {% for step_id, step_data in step_results|sort_steps %}
+                                {% set parent = step_data.step_data.parent_step if step_data.step_data else 0 %}
+                                {% set parent_name = step_data.step_data.parent_step_name if step_data.step_data else '' %}
+                                {% if parent != ns.current_group %}
+                                    {% set ns.current_group = parent %}
+                                    <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-2 mb-1">Step {{ parent }} — {{ parent_name }}</div>
+                                {% endif %}
+                                {% set status = step_data.status or 'fail' %}
+                                {% set step_pass = status == 'pass' %}
+                                {% set step_partial = status == 'partial' %}
+                                {% set step_icon = '✓' if step_pass else ('~' if step_partial else '✗') %}
+                                {% set step_icon_color = 'text-green-600' if step_pass else ('text-yellow-600' if step_partial else 'text-red-400') %}
+                                {% set step_bg = 'bg-green-50' if step_pass else ('bg-yellow-50' if step_partial else 'bg-gray-50') %}
+                                {% set display_name = step_data.step_data.name if step_data.step_data and step_data.step_data.name else step_id %}
+                                <div class="{{ step_bg }} rounded px-2 py-1.5 text-xs flex items-center gap-2 ml-2">
+                                    <span class="{{ step_icon_color }} font-bold">{{ step_icon }}</span>
+                                    <span class="text-gray-700 font-medium flex-1">{{ display_name }}</span>
+                                    {% if step_data.captured %}
+                                    {% set captured_str = step_data.captured|string %}
+                                    <span class="text-gray-500 truncate max-w-[120px]" title="{{ captured_str }}">{{ captured_str[:30] }}{% if captured_str|length > 30 %}...{% endif %}</span>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            {# Old format: flat list #}
+                            {% for step_id, step_data in step_results|sort_steps %}
+                            {% set status = step_data.status or 'fail' %}
+                            {% set step_pass = status == 'pass' %}
+                            {% set step_partial = status == 'partial' %}
+                            {% set step_icon = '✓' if step_pass else ('~' if step_partial else '✗') %}
+                            {% set step_icon_color = 'text-green-600' if step_pass else ('text-yellow-600' if step_partial else 'text-red-400') %}
+                            {% set step_bg = 'bg-green-50' if step_pass else ('bg-yellow-50' if step_partial else 'bg-gray-50') %}
+                            {% set step_name = step_id.replace('step_', '').replace('_', ' ').title() %}
+                            <div class="{{ step_bg }} rounded px-2 py-1.5 text-xs flex items-center gap-2">
+                                <span class="{{ step_icon_color }} font-bold">{{ step_icon }}</span>
+                                <span class="text-gray-700 font-medium flex-1">{{ step_name }}</span>
+                                {% if step_data.captured %}
+                                {% set captured_str = step_data.captured|string %}
+                                <span class="text-gray-500 truncate max-w-[120px]" title="{{ captured_str }}">{{ captured_str[:30] }}{% if captured_str|length > 30 %}...{% endif %}</span>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        {% endif %}
                     </div>
                     {% endif %}
 
@@ -255,6 +288,98 @@
 </div>
 
 <script>
+function sortStepEntries(entries) {
+    return entries.sort((a, b) => {
+        // Try new format: s{N}_q{M}
+        const newA = a[0].match(/^s(\d+)_q(\d+)/);
+        const newB = b[0].match(/^s(\d+)_q(\d+)/);
+        if (newA && newB) {
+            const stepDiff = parseInt(newA[1]) - parseInt(newB[1]);
+            if (stepDiff !== 0) return stepDiff;
+            return parseInt(newA[2]) - parseInt(newB[2]);
+        }
+        // Fall back to old format: step_{N}
+        const oldA = parseInt((a[0].match(/step_(\d+)/) || [])[1]) || 0;
+        const oldB = parseInt((b[0].match(/step_(\d+)/) || [])[1]) || 0;
+        return oldA - oldB || a[0].localeCompare(b[0]);
+    });
+}
+
+function isNewFormat(stepResults) {
+    for (const [, data] of Object.entries(stepResults)) {
+        if (data.step_data && data.step_data.parent_step !== undefined) return true;
+        break;
+    }
+    return false;
+}
+
+function getDisplayName(stepId, stepData) {
+    if (stepData.step_data && stepData.step_data.name) return stepData.step_data.name;
+    // Old format fallback
+    return stepId.replace('step_', '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
+function renderCompletenessSteps(stepResults) {
+    const sorted = sortStepEntries(Object.entries(stepResults));
+    const newFmt = isNewFormat(stepResults);
+    let html = '<div class="space-y-1">';
+
+    if (newFmt) {
+        let currentGroup = -1;
+        for (const [stepId, stepData] of sorted) {
+            const parent = (stepData.step_data || {}).parent_step || 0;
+            const parentName = (stepData.step_data || {}).parent_step_name || '';
+
+            if (parent !== currentGroup) {
+                currentGroup = parent;
+                html += `<div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-2 mb-1">Step ${parent} — ${parentName}</div>`;
+            }
+
+            const status = stepData.status || 'fail';
+            const stepPass = status === 'pass';
+            const stepPartial = status === 'partial';
+            const stepIcon = stepPass ? '✓' : (stepPartial ? '~' : '✗');
+            const stepIconColor = stepPass ? 'text-green-600' : (stepPartial ? 'text-yellow-600' : 'text-red-400');
+            const stepBg = stepPass ? 'bg-green-50' : (stepPartial ? 'bg-yellow-50' : 'bg-gray-50');
+            const displayName = getDisplayName(stepId, stepData);
+            const captured = stepData.captured ? String(stepData.captured) : '';
+            const truncated = captured.length > 30 ? captured.substring(0, 30) + '...' : captured;
+
+            html += `
+                <div class="${stepBg} rounded px-2 py-1.5 text-xs flex items-center gap-2 ml-2">
+                    <span class="${stepIconColor} font-bold">${stepIcon}</span>
+                    <span class="text-gray-700 font-medium flex-1">${displayName}</span>
+                    ${captured ? `<span class="text-gray-500 truncate max-w-[120px]" title="${captured}">${truncated}</span>` : ''}
+                </div>
+            `;
+        }
+    } else {
+        // Old format: flat list
+        for (const [stepId, stepData] of sorted) {
+            const status = stepData.status || 'fail';
+            const stepPass = status === 'pass';
+            const stepPartial = status === 'partial';
+            const stepIcon = stepPass ? '✓' : (stepPartial ? '~' : '✗');
+            const stepIconColor = stepPass ? 'text-green-600' : (stepPartial ? 'text-yellow-600' : 'text-red-400');
+            const stepBg = stepPass ? 'bg-green-50' : (stepPartial ? 'bg-yellow-50' : 'bg-gray-50');
+            const stepName = getDisplayName(stepId, stepData);
+            const captured = stepData.captured ? String(stepData.captured) : '';
+            const truncated = captured.length > 30 ? captured.substring(0, 30) + '...' : captured;
+
+            html += `
+                <div class="${stepBg} rounded px-2 py-1.5 text-xs flex items-center gap-2">
+                    <span class="${stepIconColor} font-bold">${stepIcon}</span>
+                    <span class="text-gray-700 font-medium flex-1">${stepName}</span>
+                    ${captured ? `<span class="text-gray-500 truncate max-w-[120px]" title="${captured}">${truncated}</span>` : ''}
+                </div>
+            `;
+        }
+    }
+
+    html += '</div>';
+    return html;
+}
+
 async function runJudges() {
     const btn = document.getElementById('run-judges-btn');
     const resultsDiv = document.getElementById('judge-results');
@@ -291,7 +416,6 @@ async function runJudges() {
         for (const r of data.safety) {
             const isPassed = r.verdict === 'pass';
             const isFailed = r.verdict === 'fail';
-            const isNA = r.verdict === 'not_applicable';
 
             let bgColor = 'bg-gray-50';
             let borderColor = 'border-gray-200';
@@ -337,7 +461,6 @@ async function runJudges() {
         html += '<h4 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Quality</h4>';
         for (const r of data.quality) {
             const score = r.score;
-            const isNA = r.verdict === 'not_applicable';
 
             let bgColor = 'bg-gray-50';
             let borderColor = 'border-gray-200';
@@ -396,8 +519,8 @@ async function runJudges() {
         if (data.completeness) {
             const c = data.completeness;
             const meta = c.metadata || {};
-            const stepsCompleted = meta.steps_completed || 0;
-            const stepsTotal = meta.steps_total || 13;
+            const qCompleted = meta.questions_completed || meta.steps_completed || 0;
+            const qTotal = meta.questions_total || meta.steps_total || 13;
             const completionRate = meta.completion_rate || 0;
             const isPass = c.verdict === 'pass';
             const isPartial = c.verdict === 'partial';
@@ -414,7 +537,7 @@ async function runJudges() {
                 <div class="${bgColor} border ${borderColor} rounded-lg p-3 mb-3">
                     <div class="flex items-center justify-between">
                         <div>
-                            <div class="font-medium text-gray-800">${stepsCompleted}/${stepsTotal} Steps Complete</div>
+                            <div class="font-medium text-gray-800">${qCompleted}/${qTotal} Questions Complete</div>
                             <div class="text-xs text-gray-600 mt-1">${c.reasoning || ''}</div>
                         </div>
                         <div class="${rateColor} text-2xl font-bold">${Math.round(completionRate * 100)}%</div>
@@ -422,35 +545,10 @@ async function runJudges() {
                 </div>
             `;
 
-            // Step-by-Step Breakdown
+            // Step-by-Step Breakdown (grouped or flat)
             const stepResults = meta.step_results || {};
-            const sortedStepEntries = Object.entries(stepResults).sort((a, b) => {
-                const numA = parseInt((a[0].match(/step_(\d+)/) || [])[1]) || 0;
-                const numB = parseInt((b[0].match(/step_(\d+)/) || [])[1]) || 0;
-                return numA - numB || a[0].localeCompare(b[0]);
-            });
-            if (sortedStepEntries.length > 0) {
-                html += '<div class="space-y-1">';
-                for (const [stepId, stepData] of sortedStepEntries) {
-                    const status = stepData.status || 'fail';
-                    const stepPass = status === 'pass';
-                    const stepPartial = status === 'partial';
-                    const stepIcon = stepPass ? '✓' : (stepPartial ? '~' : '✗');
-                    const stepIconColor = stepPass ? 'text-green-600' : (stepPartial ? 'text-yellow-600' : 'text-red-400');
-                    const stepBg = stepPass ? 'bg-green-50' : (stepPartial ? 'bg-yellow-50' : 'bg-gray-50');
-                    const stepName = stepId.replace('step_', '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                    const captured = stepData.captured || '';
-                    const truncatedCaptured = captured.length > 30 ? captured.substring(0, 30) + '...' : captured;
-
-                    html += `
-                        <div class="${stepBg} rounded px-2 py-1.5 text-xs flex items-center gap-2">
-                            <span class="${stepIconColor} font-bold">${stepIcon}</span>
-                            <span class="text-gray-700 font-medium flex-1">${stepName}</span>
-                            ${captured ? `<span class="text-gray-500 truncate max-w-[120px]" title="${captured}">${truncatedCaptured}</span>` : ''}
-                        </div>
-                    `;
-                }
-                html += '</div>';
+            if (Object.keys(stepResults).length > 0) {
+                html += renderCompletenessSteps(stepResults);
             }
 
             // Missing Fields
