@@ -68,6 +68,7 @@ class PersonaGenerator:
         config: Optional[PersonaGenerationConfig] = None,
         llm_client=None,
         seed: Optional[int] = None,
+        adjusted_distributions: Optional[dict] = None,
     ):
         """
         Initialize the generator.
@@ -76,9 +77,11 @@ class PersonaGenerator:
             config: Generation configuration (defaults to ODL population)
             llm_client: Optional OpenAI client for generating unique details
             seed: Random seed for reproducibility
+            adjusted_distributions: Population-adjusted weights per dimension
         """
         self.config = config or PersonaGenerationConfig.default()
         self.llm_client = llm_client
+        self.adjusted_distributions = adjusted_distributions or {}
         if seed is not None:
             random.seed(seed)
 
@@ -95,6 +98,12 @@ class PersonaGenerator:
         items = list(distribution.keys())
         weights = list(distribution.values())
         return random.choices(items, weights=weights, k=1)[0]
+
+    def _get_effective_distribution(self, dimension: str) -> dict:
+        """Get distribution, preferring adjusted weights if available."""
+        if dimension in self.adjusted_distributions:
+            return self.adjusted_distributions[dimension]
+        return self.config.get_distribution(dimension)
 
     def _sample_age(self) -> int:
         """Sample an age from the age distribution."""
@@ -257,16 +266,16 @@ class PersonaGenerator:
             A generated Persona
         """
         # Sample from config-driven distributions
-        lang = language or self._sample_from_distribution(self.config.get_distribution("language"))
-        issue = legal_issue or self._sample_from_distribution(self.config.get_distribution("legal_issue"))
-        gender = self._sample_from_distribution(self.config.get_distribution("gender"))
-        ethnicity = self._sample_from_distribution(self.config.get_distribution("ethnicity"))
-        employment = self._sample_from_distribution(self.config.get_distribution("employment"))
-        housing = self._sample_from_distribution(self.config.get_distribution("housing"))
-        english_fluency = self._sample_from_distribution(self.config.get_distribution("english_fluency"))
-        education = self._sample_from_distribution(self.config.get_distribution("education"))
-        comm_style = self._sample_from_distribution(self.config.get_distribution("communication_style"))
-        trust = self._sample_from_distribution(self.config.get_distribution("trust_level"))
+        lang = language or self._sample_from_distribution(self._get_effective_distribution("language"))
+        issue = legal_issue or self._sample_from_distribution(self._get_effective_distribution("legal_issue"))
+        gender = self._sample_from_distribution(self._get_effective_distribution("gender"))
+        ethnicity = self._sample_from_distribution(self._get_effective_distribution("ethnicity"))
+        employment = self._sample_from_distribution(self._get_effective_distribution("employment"))
+        housing = self._sample_from_distribution(self._get_effective_distribution("housing"))
+        english_fluency = self._sample_from_distribution(self._get_effective_distribution("english_fluency"))
+        education = self._sample_from_distribution(self._get_effective_distribution("education"))
+        comm_style = self._sample_from_distribution(self._get_effective_distribution("communication_style"))
+        trust = self._sample_from_distribution(self._get_effective_distribution("trust_level"))
         household_size = self._sample_from_distribution(HOUSEHOLD_SIZE_DISTRIBUTION)
 
         age = self._sample_age()

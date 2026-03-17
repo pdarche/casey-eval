@@ -415,7 +415,22 @@ def run_evaluation_background(run_id: int, version: str, config: dict):
 
         persona_cfg = PersonaGenerationConfig.from_dict(config.get("persona_config", {}))
         openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-        generator = PersonaGenerator(config=persona_cfg, llm_client=openai_client)
+
+        # Query current population for diversity-aware generation
+        adjusted = {}
+        try:
+            from eval.personas.population import get_population_counts, compute_all_adjusted_distributions
+            population_counts = get_population_counts()
+            if population_counts:
+                adjusted = compute_all_adjusted_distributions(
+                    config=persona_cfg,
+                    population_counts=population_counts,
+                    batch_size=count,
+                )
+        except Exception as e:
+            print(f"[eval] Population query failed, using default distributions: {e}", file=sys.stderr, flush=True)
+
+        generator = PersonaGenerator(config=persona_cfg, llm_client=openai_client, adjusted_distributions=adjusted)
         print(f"[eval] Generating {count} personas...", file=sys.stderr, flush=True)
         personas = generator.generate_batch(count)
         print(f"[eval] Generated {len(personas)} personas, starting conversations", file=sys.stderr, flush=True)

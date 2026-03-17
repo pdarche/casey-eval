@@ -78,7 +78,7 @@ Return only valid JSON."""
             },
             {
                 "role": "user",
-                "content": extraction_prompt.format(content=prompt_content[:15000])
+                "content": extraction_prompt.format(content=prompt_content)
             }
         ],
         max_completion_tokens=8192,
