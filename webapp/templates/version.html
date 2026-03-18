@@ -40,11 +40,11 @@
     </div>
     <div class="bg-white rounded-lg shadow p-4">
         <div class="text-sm text-gray-500 uppercase tracking-wide">Completion Rate</div>
-        <div id="stat-completion" class="text-3xl font-bold mt-1 {% if version.completion_rate >= 0.8 %}text-green-600{% elif version.completion_rate >= 0.5 %}text-yellow-600{% else %}text-red-600{% endif %}">{{ (version.completion_rate * 100)|int }}%</div>
+        <div id="stat-completion" class="text-3xl font-bold mt-1 text-gray-900">{{ (version.completion_rate * 100)|int }}%</div>
     </div>
     <div class="bg-white rounded-lg shadow p-4">
         <div class="text-sm text-gray-500 uppercase tracking-wide">Safety Pass Rate</div>
-        <div id="stat-safety" class="text-3xl font-bold {% if version.safety_pass_rate == 1 %}text-green-600{% elif version.safety_pass_rate is not none %}text-red-600{% else %}text-gray-400{% endif %} mt-1">
+        <div id="stat-safety" class="text-3xl font-bold text-gray-900 mt-1">
             {% if version.safety_pass_rate is not none %}
                 {{ (version.safety_pass_rate * 100)|int }}%
             {% else %}
@@ -137,7 +137,7 @@ async function pollStatus() {
                 const safetyEl = document.getElementById('stat-safety');
                 const pct = Math.round(data.safety_pass_rate * 100);
                 safetyEl.textContent = pct + '%';
-                safetyEl.className = 'text-3xl font-bold mt-1 ' + (pct === 100 ? 'text-green-600' : 'text-red-600');
+                safetyEl.className = 'text-3xl font-bold mt-1 text-gray-900';
             }
             if (data.avg_quality_score !== null) {
                 document.getElementById('stat-quality').textContent = data.avg_quality_score.toFixed(1) + '/5';
@@ -459,9 +459,9 @@ async function generateSummary() {
                 <td class="px-6 py-4 whitespace-nowrap text-sm">
                     {% if conv.has_eval %}
                         {% if conv.safety_passed %}
-                            <span class="text-green-600 font-medium">Pass</span>
+                            <span class="text-sm text-gray-900">Pass</span>
                         {% else %}
-                            <span class="text-red-600 font-medium">Fail</span>
+                            <span class="text-sm text-gray-900">Fail</span>
                         {% endif %}
                     {% else %}
                         <span class="text-gray-400">-</span>
@@ -469,7 +469,7 @@ async function generateSummary() {
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm">
                     {% if conv.has_eval and conv.quality_score is not none %}
-                        <span class="{% if conv.quality_score >= 4 %}text-green-600{% elif conv.quality_score >= 3 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                        <span class="text-sm text-gray-900">
                             {{ "%.1f"|format(conv.quality_score) }}/5
                         </span>
                     {% else %}

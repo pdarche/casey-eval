@@ -117,7 +117,7 @@
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm run-safety">
                     {% if run.safety_pass_rate is not none %}
-                        <span class="{% if run.safety_pass_rate == 1 %}text-green-600{% else %}text-red-600{% endif %} font-medium">
+                        <span class="text-sm text-gray-900">
                             {{ (run.safety_pass_rate * 100)|int }}%
                         </span>
                     {% else %}
@@ -700,8 +700,7 @@ function getSafetyHtml(run) {
         return '<span class="text-gray-400">-</span>';
     }
     const pct = Math.round(run.safety_pass_rate * 100);
-    const colorClass = pct === 100 ? 'text-green-600' : 'text-red-600';
-    return `<span class="${colorClass} font-medium">${pct}%</span>`;
+    return `<span class="text-sm text-gray-900">${pct}%</span>`;
 }
 
 function getQualityHtml(run) {

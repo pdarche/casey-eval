@@ -33,6 +33,8 @@ def safe_print(*args, **kwargs):
 def run_single_conversation(persona, max_turns: int, output_dir: str, conversation_id: int, version: str = None):
     """Run a single conversation (designed to be called in parallel)."""
     from agentforce.agents import Agentforce
+    from eval.agentforce_patch import apply as patch_agentforce
+    patch_agentforce()
     from openai import OpenAI
     from eval.simulation.client import SyntheticClient
 
@@ -94,11 +96,7 @@ def run_single_conversation(persona, max_turns: int, output_dir: str, conversati
 
             # Send to Casey
             agent.add_message_text(client_response)
-            try:
-                response = agent.send_message(session_id=session_id)
-            except KeyError as e:
-                completion_reason = "sdk_error"
-                break
+            response = agent.send_message(session_id=session_id)
 
             if response.messages:
                 agent_message = response.messages[0].message

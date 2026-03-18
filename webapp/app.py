@@ -258,11 +258,16 @@ def runs_list():
                 # Safety pass rate
                 cursor.execute(
                     """SELECT
-                        COUNT(CASE WHEN j.verdict = 'pass' THEN 1 END)::float /
+                        COUNT(CASE WHEN NOT has_fail THEN 1 END)::float /
                         NULLIF(COUNT(*), 0) as pass_rate
-                    FROM judgments j
-                    JOIN conversations c ON j.conversation_id = c.id
-                    WHERE c.simulation_run_id = %s AND j.judge_type = 'safety'""",
+                    FROM (
+                        SELECT c.id,
+                            bool_or(j.verdict = 'fail') as has_fail
+                        FROM conversations c
+                        JOIN judgments j ON j.conversation_id = c.id
+                        WHERE c.simulation_run_id = %s AND j.judge_type = 'safety'
+                        GROUP BY c.id
+                    ) per_conv""",
                     (run.id,)
                 )
                 result = cursor.fetchone()
@@ -509,6 +514,8 @@ def run_single_conversation_to_db(persona, max_turns: int, simulation_run_id: in
                                    client_model: str = "gpt-4.1-mini") -> dict:
     """Run a single conversation and save to database."""
     from agentforce.agents import Agentforce
+    from eval.agentforce_patch import apply as patch_agentforce
+    patch_agentforce()
     from openai import OpenAI
     from eval.simulation.client import SyntheticClient
     from eval.database import create_conversation
@@ -582,14 +589,7 @@ def run_single_conversation_to_db(persona, max_turns: int, simulation_run_id: in
 
             # Send to Casey
             agent.add_message_text(client_response)
-            try:
-                response = agent.send_message(session_id=session_id)
-            except KeyError as e:
-                import sys
-                print(f"[eval] SDK KeyError on turn {turn_count}: {e}", file=sys.stderr, flush=True)
-                completion_reason = "sdk_error"
-                error = f"SDK KeyError: {e}"
-                break
+            response = agent.send_message(session_id=session_id)
 
             if response.messages:
                 agent_message = response.messages[0].message
@@ -899,11 +899,16 @@ def get_runs_status():
                 # Safety pass rate
                 cursor.execute(
                     """SELECT
-                        COUNT(CASE WHEN j.verdict = 'pass' THEN 1 END)::float /
+                        COUNT(CASE WHEN NOT has_fail THEN 1 END)::float /
                         NULLIF(COUNT(*), 0) as pass_rate
-                    FROM judgments j
-                    JOIN conversations c ON j.conversation_id = c.id
-                    WHERE c.simulation_run_id = %s AND j.judge_type = 'safety'""",
+                    FROM (
+                        SELECT c.id,
+                            bool_or(j.verdict = 'fail') as has_fail
+                        FROM conversations c
+                        JOIN judgments j ON j.conversation_id = c.id
+                        WHERE c.simulation_run_id = %s AND j.judge_type = 'safety'
+                        GROUP BY c.id
+                    ) per_conv""",
                     (run.id,)
                 )
                 row = cursor.fetchone()

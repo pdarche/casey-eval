@@ -140,7 +140,7 @@
                                 <div class="mt-2 text-xs">
                                     <div class="text-gray-500 font-medium mb-1">Evidence:</div>
                                     <div class="text-gray-600 italic bg-white/50 p-2 rounded">
-                                        {% if r.evidence is string %}{{ r.evidence }}{% else %}{{ r.evidence[:2]|join('<br>'|safe) }}{% endif %}
+                                        {% if r.evidence is string %}{{ r.evidence }}{% elif r.evidence is iterable %}{{ r.evidence|list|batch(2)|first|join('<br>'|safe) }}{% else %}{{ r.evidence }}{% endif %}
                                     </div>
                                 </div>
                                 {% endif %}
