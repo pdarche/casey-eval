@@ -544,8 +544,8 @@ BEHAVIORAL_RULES = [
         category=RuleCategory.BEHAVIOR,
         evaluation_method=EvaluationMethod.PATTERN_MATCH,
         pass_criteria=[
-            "Language question appears in all 8 languages",
-            "Includes English, Spanish, French, Chinese, Thai, Korean, Japanese",
+            "Language question appears in all supported languages",
+            "Includes English, Spanish, Cantonese, Mandarin, Arabic, Filipino, Russian, Vietnamese, Burmese",
         ],
         fail_criteria=[
             "Only asks in English",
@@ -554,11 +554,13 @@ BEHAVIORAL_RULES = [
         required_patterns=[
             r"English",
             r"Español",
-            r"Français",
-            r"中文",
-            r"ภาษาไทย",
-            r"한국어",
-            r"日本語",
+            r"粵語",
+            r"普通话",
+            r"العربية",
+            r"Filipino",
+            r"Русский",
+            r"Tiếng Việt",
+            r"ဗမာစာ",
         ],
         applies_when="First message of conversation",
         source_instruction_order=None,  # From q1 instructions

@@ -263,11 +263,14 @@
                                 <option value="">Default Distribution</option>
                                 <option value="English">English</option>
                                 <option value="Español">Spanish</option>
-                                <option value="中文">Cantonese/Chinese</option>
-                                <option value="Français">French</option>
-                                <option value="ภาษาไทย">Thai</option>
-                                <option value="한국어">Korean</option>
-                                <option value="日本語">Japanese</option>
+                                <option value="粵語">Cantonese</option>
+                                <option value="普通话">Mandarin</option>
+                                <option value="العربية">Arabic</option>
+                                <option value="Filipino">Filipino</option>
+                                <option value="Русский">Russian</option>
+                                <option value="Tiếng Việt">Vietnamese</option>
+                                <option value="ဗမာစာ">Burmese</option>
+                                <option value="Other">Other</option>
                             </select>
                         </div>
                         <div>
@@ -837,8 +840,9 @@ function buildPersonaConfig() {
         return config;
     } else if (preset === 'language_coverage') {
         config.language = {
-            'English': 0.30, 'Español': 0.20, '中文': 0.15,
-            'Français': 0.12, 'ภาษาไทย': 0.08, '한국어': 0.08, '日本語': 0.07
+            'English': 0.25, 'Español': 0.20, '粵語': 0.10, '普通话': 0.10,
+            'العربية': 0.10, 'Filipino': 0.08, 'Русский': 0.07,
+            'Tiếng Việt': 0.05, 'ဗမာစာ': 0.03, 'Other': 0.02
         };
         return config;
     } else if (preset === 'custom') {

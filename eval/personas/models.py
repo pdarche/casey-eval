@@ -15,11 +15,14 @@ class Language(Enum):
     """Supported languages for intake."""
     ENGLISH = "English"
     SPANISH = "Español"
-    FRENCH = "Français"
-    CHINESE = "中文"
-    THAI = "ภาษาไทย"
-    KOREAN = "한국어"
-    JAPANESE = "日本語"
+    CANTONESE = "粵語"
+    MANDARIN = "普通话"
+    ARABIC = "العربية"
+    FILIPINO = "Filipino"
+    RUSSIAN = "Русский"
+    VIETNAMESE = "Tiếng Việt"
+    BURMESE = "ဗမာစာ"
+    OTHER = "Other"
 
 
 class EnglishFluency(Enum):
@@ -61,6 +64,7 @@ class EmploymentStatus(Enum):
     EMPLOYED_PART = "Employed, part-time"
     UNEMPLOYED_LOOKING = "Unemployed, looking for work"
     UNEMPLOYED_NOT_LOOKING = "Unemployed, not looking for work"
+    DISABLED = "Disabled or unable to work"
     RETIRED = "Retired"
 
 

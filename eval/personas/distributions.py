@@ -16,87 +16,108 @@ from eval.personas.models import (
     TrustLevel,
 )
 
+# Distributions updated from Salesforce Demographic Summary Report
+# Total Records: 8,097 | Generated: March 19, 2026
+
 
 # =============================================================================
 # LANGUAGE DISTRIBUTION
-# Based on ODL client language preferences
+# Source: Salesforce Primary Language field (6,839 valid responses)
 # =============================================================================
 
 LANGUAGE_DISTRIBUTION = {
-    Language.ENGLISH: 0.65,      # 65% - Primary language
-    Language.SPANISH: 0.20,      # 20% - Second largest group
-    Language.CHINESE: 0.10,      # 10% - Cantonese, significant SF population
-    Language.FRENCH: 0.02,       # 2%  - Other languages combined
-    Language.THAI: 0.01,         # 1%
-    Language.KOREAN: 0.01,       # 1%
-    Language.JAPANESE: 0.01,     # 1%
+    Language.ENGLISH: 0.666,      # 66.6%
+    Language.SPANISH: 0.251,      # 25.1%
+    Language.CANTONESE: 0.019,    # 1.9%
+    Language.MANDARIN: 0.010,     # 1.0%
+    Language.ARABIC: 0.010,       # 1.0%
+    Language.FILIPINO: 0.007,     # 0.7%
+    Language.RUSSIAN: 0.006,      # 0.6%
+    Language.VIETNAMESE: 0.004,   # 0.4%
+    Language.BURMESE: 0.001,      # 0.1%
+    Language.OTHER: 0.026,        # 2.6%
 }
 
 
 # =============================================================================
 # LEGAL ISSUE DISTRIBUTION
-# TODO: Update with actual ODL case type volumes
+# Source: Salesforce Legal Issue field (1,110 valid responses, keyword-based)
+# Note: Categories may overlap; normalized to sum to 1.0
 # =============================================================================
 
 LEGAL_ISSUE_DISTRIBUTION = {
-    LegalIssue.HOUSING: 0.25,           # Housing issues (high volume)
-    LegalIssue.UD_HOUSING: 0.20,        # Unlawful detainer (eviction)
-    LegalIssue.FAMILY: 0.15,            # Family law
-    LegalIssue.EMPLOYMENT: 0.12,        # Employment issues
-    LegalIssue.IMMIGRATION: 0.10,       # Immigration
-    LegalIssue.CONSUMER: 0.08,          # Consumer protection
-    LegalIssue.ELDER_ESTATE: 0.05,      # Elder/Estate
-    LegalIssue.CIVIL_LITIGATION: 0.03,  # Civil litigation
-    LegalIssue.BRIEF_SERVICES: 0.02,    # Brief services
+    LegalIssue.HOUSING: 0.29,           # 24.4% Housing/Tenant Rights
+    LegalIssue.UD_HOUSING: 0.06,        # 5.1% Eviction/Unlawful Detainer
+    LegalIssue.FAMILY: 0.13,            # 10.9% Family Law/Custody
+    LegalIssue.EMPLOYMENT: 0.06,        # 4.7% Employment/Wage
+    LegalIssue.IMMIGRATION: 0.07,       # 6.0% Immigration
+    LegalIssue.CONSUMER: 0.05,          # 4.5% Debt/Collections
+    LegalIssue.ELDER_ESTATE: 0.04,      # 3.4% Personal Injury (nearest match)
+    LegalIssue.CIVIL_LITIGATION: 0.01,  # 0.8% Criminal/Record
+    LegalIssue.BRIEF_SERVICES: 0.29,    # 28.2% Public Benefits + Restraining Order/DV
 }
 
 
 # =============================================================================
 # DEMOGRAPHIC DISTRIBUTIONS
-# TODO: Update with actual ODL client demographics
+# Source: Salesforce demographic fields
 # =============================================================================
 
+# Gender (2,492 valid responses — 69.2% missing, use with caution)
 GENDER_DISTRIBUTION = {
-    Gender.FEMALE: 0.52,
-    Gender.MALE: 0.45,
-    Gender.NONBINARY: 0.02,
-    Gender.TRANS_FEMALE: 0.005,
-    Gender.TRANS_MALE: 0.005,
-    Gender.NOT_LISTED: 0.00,
+    Gender.FEMALE: 0.587,
+    Gender.MALE: 0.376,
+    Gender.NONBINARY: 0.006,
+    Gender.TRANS_FEMALE: 0.004,
+    Gender.TRANS_MALE: 0.001,
+    Gender.NOT_LISTED: 0.026,
     Gender.DECLINE: 0.00,
 }
 
-# Ethnicity distribution for San Francisco service area
-# These are placeholder estimates - update with actual data
+# Ethnicity distribution
+# Source: Salesforce Race/Ethnicity field (6,521 valid responses, multi-select)
+# Note: Multi-select field — percentages reflect individual selections, not unique records
 ETHNICITY_DISTRIBUTION = {
-    "Latino-Mexican": 0.18,
-    "Latino-Central American": 0.08,
-    "Latino-South American": 0.04,
-    "Asian-Chinese": 0.15,
-    "Asian-Filipino": 0.05,
-    "Asian-Vietnamese": 0.03,
-    "Asian-Korean": 0.02,
-    "Asian-Japanese": 0.02,
-    "Asian-Indian": 0.02,
-    "Asian-Other": 0.03,
-    "Black-African American": 0.10,
-    "Black-African": 0.02,
-    "Black-Caribbean, Central American": 0.02,
-    "White-European": 0.15,
-    "White-Other": 0.03,
-    "Pacific Islander-Native Hawaiian": 0.01,
-    "Pacific Islander-Samoan": 0.01,
-    "Pacific Islander-Other": 0.01,
-    "Indigenous-American Indian": 0.01,
-    "Middle Eastern/West Asian": 0.02,
+    "Latino-Mexican": 0.110,
+    "Latino-Central American": 0.124,
+    "Latino-South American": 0.043,
+    "Latino-Caribbean": 0.012,
+    "Latino-Other": 0.054,
+    "Asian-Chinese": 0.051,
+    "Asian-Filipino": 0.036,
+    "Asian-Vietnamese": 0.011,
+    "Asian-Korean": 0.009,
+    "Asian-Japanese": 0.007,
+    "Asian-Indian": 0.015,
+    "Asian-Cambodian": 0.004,
+    "Asian-Central": 0.004,
+    "Asian-Other": 0.019,
+    "Black-African American": 0.152,
+    "Black-African": 0.041,
+    "Black-Caribbean, Central American, South American or Mexican": 0.012,
+    "Black-Other": 0.020,
+    "White-European": 0.118,
+    "White-Other": 0.080,
+    "Pacific Islander-Samoan": 0.007,
+    "Pacific Islander-Native Hawaiian": 0.002,
+    "Pacific Islander-Chamorro": 0.001,
+    "Pacific Islander-Other": 0.005,
+    "Indigenous-American Indian/Native American": 0.022,
+    "Indigenous-Indigenous from Mexico, Caribbean, Central/South America": 0.009,
+    "Indigenous-Other Indigenous": 0.005,
+    "Middle Eastern/North African-North African": 0.013,
+    "Middle Eastern/North African-West Asian": 0.006,
+    "Middle Eastern/North African-Other": 0.008,
 }
 
+# Employment (6,499 valid responses)
 EMPLOYMENT_DISTRIBUTION = {
-    EmploymentStatus.EMPLOYED_FULL: 0.35,
-    EmploymentStatus.EMPLOYED_PART: 0.20,
-    EmploymentStatus.UNEMPLOYED_LOOKING: 0.25,
-    EmploymentStatus.UNEMPLOYED_NOT_LOOKING: 0.10,
-    EmploymentStatus.RETIRED: 0.10,
+    EmploymentStatus.EMPLOYED_FULL: 0.240,
+    EmploymentStatus.EMPLOYED_PART: 0.171,
+    EmploymentStatus.UNEMPLOYED_LOOKING: 0.282,
+    EmploymentStatus.UNEMPLOYED_NOT_LOOKING: 0.056,
+    EmploymentStatus.DISABLED: 0.170,
+    EmploymentStatus.RETIRED: 0.081,
 }
 
 HOUSING_DISTRIBUTION = {
@@ -107,12 +128,13 @@ HOUSING_DISTRIBUTION = {
     HousingStatus.OWNS: 0.07,
 }
 
+# English Proficiency (8,090 valid responses)
 ENGLISH_FLUENCY_DISTRIBUTION = {
-    EnglishFluency.NATIVE: 0.45,
-    EnglishFluency.VERY_FLUENT: 0.15,
-    EnglishFluency.FLUENT: 0.15,
-    EnglishFluency.SOMEWHAT_FLUENT: 0.15,
-    EnglishFluency.NOT_FLUENT: 0.10,
+    EnglishFluency.NATIVE: 0.552,
+    EnglishFluency.VERY_FLUENT: 0.136,
+    EnglishFluency.FLUENT: 0.122,
+    EnglishFluency.SOMEWHAT_FLUENT: 0.063,
+    EnglishFluency.NOT_FLUENT: 0.127,
 }
 
 EDUCATION_DISTRIBUTION = {
@@ -153,13 +175,16 @@ TRUST_LEVEL_DISTRIBUTION = {
 # =============================================================================
 
 # Age ranges with their probabilities
+# Source: Salesforce Age field (7,682 valid responses, median 41, mean 42.4)
 AGE_DISTRIBUTION = {
-    (18, 25): 0.15,   # Young adults
-    (26, 35): 0.25,   # Early career
-    (36, 45): 0.20,   # Mid career
-    (46, 55): 0.18,   # Late career
-    (56, 65): 0.12,   # Pre-retirement
-    (66, 80): 0.10,   # Seniors
+    (18, 24): 0.05,    # 5.0% (Under 18 excluded — 6.3% in data are likely data entry errors)
+    (25, 34): 0.212,   # 21.2%
+    (35, 44): 0.244,   # 24.4%
+    (45, 54): 0.169,   # 16.9%
+    (55, 64): 0.131,   # 13.1%
+    (65, 74): 0.088,   # 8.8%
+    (75, 85): 0.041,   # 4.1%
+    (16, 17): 0.065,   # 6.5% Under 18 (minors with legal issues)
 }
 
 
@@ -168,13 +193,19 @@ AGE_DISTRIBUTION = {
 # Based on 200% federal poverty line eligibility
 # =============================================================================
 
-# Monthly income ranges (based on household size 1-4)
+# Monthly income ranges
+# Source: Salesforce Total Monthly Income (6,983 valid responses, median $1,550, mean $2,564)
 INCOME_DISTRIBUTION = {
-    (0, 500): 0.15,         # Very low income
-    (500, 1000): 0.20,      # Low income
-    (1000, 2000): 0.30,     # Moderate low income
-    (2000, 3000): 0.25,     # Near poverty line
-    (3000, 4500): 0.10,     # At poverty line limit
+    (0, 499): 0.240,         # 24.0%
+    (500, 999): 0.084,       # 8.4%
+    (1000, 1499): 0.145,     # 14.5%
+    (1500, 1999): 0.091,     # 9.1%
+    (2000, 2999): 0.137,     # 13.7%
+    (3000, 3999): 0.101,     # 10.1%
+    (4000, 4999): 0.067,     # 6.7%
+    (5000, 7499): 0.071,     # 7.1%
+    (7500, 9999): 0.024,     # 2.4%
+    (10000, 15000): 0.041,   # 4.1% ($10,000+)
 }
 
 

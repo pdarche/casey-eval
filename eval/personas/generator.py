@@ -139,25 +139,33 @@ class PersonaGenerator:
                 Gender.FEMALE: ["Maria Garcia", "Ana Rodriguez", "Carmen Lopez"],
                 Gender.MALE: ["Jose Martinez", "Carlos Hernandez", "Miguel Sanchez"],
             },
-            Language.CHINESE: {
+            Language.CANTONESE: {
                 Gender.FEMALE: ["李美华", "王小红", "张丽"],
                 Gender.MALE: ["李明", "王强", "张伟"],
             },
-            Language.KOREAN: {
-                Gender.FEMALE: ["김민지", "이서연", "박지은"],
-                Gender.MALE: ["김민수", "이준호", "박성민"],
+            Language.MANDARIN: {
+                Gender.FEMALE: ["陈晓燕", "刘芳", "赵静"],
+                Gender.MALE: ["陈伟", "刘洋", "赵磊"],
             },
-            Language.FRENCH: {
-                Gender.FEMALE: ["Marie Dubois", "Sophie Martin", "Claire Bernard"],
-                Gender.MALE: ["Jean Dupont", "Pierre Martin", "Michel Bernard"],
+            Language.ARABIC: {
+                Gender.FEMALE: ["Fatima Hassan", "Amira Said", "Nour Ibrahim"],
+                Gender.MALE: ["Ahmed Hassan", "Omar Said", "Youssef Ibrahim"],
             },
-            Language.THAI: {
-                Gender.FEMALE: ["สมศรี จันทร์ดี", "นิตยา สุขใจ", "วิไล ดีงาม"],
-                Gender.MALE: ["สมชาย ดีใจ", "วิชัย สุขสันต์", "ประเสริฐ มั่นคง"],
+            Language.FILIPINO: {
+                Gender.FEMALE: ["Maria Santos", "Ana Reyes", "Rose Cruz"],
+                Gender.MALE: ["Juan Santos", "Jose Reyes", "Mark Cruz"],
             },
-            Language.JAPANESE: {
-                Gender.FEMALE: ["田中花子", "山田美咲", "佐藤愛"],
-                Gender.MALE: ["田中太郎", "山田健一", "佐藤大輔"],
+            Language.RUSSIAN: {
+                Gender.FEMALE: ["Анна Иванова", "Мария Петрова", "Елена Сидорова"],
+                Gender.MALE: ["Иван Иванов", "Дмитрий Петров", "Алексей Сидоров"],
+            },
+            Language.VIETNAMESE: {
+                Gender.FEMALE: ["Nguyen Thi Mai", "Tran Thi Lan", "Le Thi Hoa"],
+                Gender.MALE: ["Nguyen Van Minh", "Tran Van Duc", "Le Van Hung"],
+            },
+            Language.BURMESE: {
+                Gender.FEMALE: ["Aye Aye Win", "Khin Mar Oo", "Su Su Lwin"],
+                Gender.MALE: ["Aung Kyaw", "Min Thu", "Zaw Win"],
             },
         }
 

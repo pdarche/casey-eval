@@ -82,14 +82,15 @@ def _resolve_enum_value(value: str, enum_cls):
     aliases = {
         "spanish": "Español",
         "español": "Español",
-        "chinese": "中文",
-        "cantonese": "中文",
-        "mandarin": "中文",
-        "french": "Français",
-        "français": "Français",
-        "thai": "ภาษาไทย",
-        "korean": "한국어",
-        "japanese": "日本語",
+        "cantonese": "粵語",
+        "chinese": "粵語",
+        "mandarin": "普通话",
+        "arabic": "العربية",
+        "filipino": "Filipino",
+        "russian": "Русский",
+        "vietnamese": "Tiếng Việt",
+        "burmese": "ဗမာစာ",
+        "other": "Other",
     }
     alias_value = aliases.get(value_lower)
     if alias_value:
@@ -245,12 +246,15 @@ class PersonaGenerationConfig:
         """Ensure minimum representation per language by using a flatter distribution."""
         return cls(
             language={
-                "English": 0.30,
+                "English": 0.25,
                 "Español": 0.20,
-                "中文": 0.15,
-                "Français": 0.12,
-                "ภาษาไทย": 0.08,
-                "한국어": 0.08,
-                "日本語": 0.07,
+                "粵語": 0.10,
+                "普通话": 0.10,
+                "العربية": 0.10,
+                "Filipino": 0.08,
+                "Русский": 0.07,
+                "Tiếng Việt": 0.05,
+                "ဗမာစာ": 0.03,
+                "Other": 0.02,
             }
         )
